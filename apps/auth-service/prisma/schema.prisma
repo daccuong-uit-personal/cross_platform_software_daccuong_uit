@@ -11,12 +11,12 @@ datasource db {
 }
 
 model Account {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  passwordHash  String
-  status        AccountStatus @default(PENDING)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String        @map("password_hash")
+  status       AccountStatus @default(PENDING)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
 
   @@map("accounts")
 }

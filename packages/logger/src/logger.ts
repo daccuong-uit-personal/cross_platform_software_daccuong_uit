@@ -1,4 +1,5 @@
 import winston from 'winston';
+import { trace, context } from '@opentelemetry/api';
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'verbose';
 
@@ -10,18 +11,35 @@ export interface LoggerOptions {
 
 const { combine, timestamp, printf, colorize, json, errors } = winston.format;
 
+/**
+ * Winston format that injects OpenTelemetry trace context into the log info object.
+ * This allows correlation between logs and traces in tools like Jaeger/Loki.
+ */
+const tracingFormat = winston.format((info) => {
+  const span = trace.getSpan(context.active());
+  if (span) {
+    const { traceId, spanId } = span.spanContext();
+    info.traceId = traceId;
+    info.spanId = spanId;
+  }
+  return info;
+});
+
 const prettyFormat = combine(
+  tracingFormat(),
   colorize({ all: true }),
   timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
   errors({ stack: true }),
-  printf(({ level, message, timestamp, service, stack, ...meta }) => {
+  printf(({ level, message, timestamp, service, stack, traceId, ...meta }) => {
+    const traceStr = traceId ? ` [trace_id=${traceId}]` : '';
     const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
     const stackStr = stack ? `\n${stack}` : '';
-    return `${timestamp} [${service}] ${level}: ${message}${metaStr}${stackStr}`;
+    return `${timestamp} [${service}]${traceStr} ${level}: ${message}${metaStr}${stackStr}`;
   }),
 );
 
 const jsonFormat = combine(
+  tracingFormat(),
   timestamp(),
   errors({ stack: true }),
   json(),

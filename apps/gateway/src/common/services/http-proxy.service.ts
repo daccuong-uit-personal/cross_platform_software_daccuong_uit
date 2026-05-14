@@ -17,7 +17,7 @@ export class HttpProxyService {
   ): Promise<T> {
     const { body, headers = {} } = options;
 
-    logger.debug(`Forwarding ${method} → ${url}`);
+    logger.info(`Forwarding ${method} → ${url}`);
 
     const response = await fetch(url, {
       method,

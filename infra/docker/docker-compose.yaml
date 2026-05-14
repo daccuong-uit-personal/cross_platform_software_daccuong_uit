@@ -50,6 +50,21 @@ services:
       timeout: 5s
       retries: 5
 
+  # ─── Observability ──────────────────────────────────────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    ports:
+      - "16686:16686" # UI
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:16686"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ─── Services (uncomment when ready to containerize) ─────────────────────────
   # auth-service:
   #   build:

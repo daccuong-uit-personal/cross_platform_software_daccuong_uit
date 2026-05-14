@@ -11,8 +11,9 @@
 
     ### Phase 1: Media Platform
     - **Goal**: Build media lifecycle (upload, storage, processing).
-    - **Core Components**: `media-service`, `object-storage`, `worker`.
-    - **Tech**: Redis Pub/Sub, BullMQ.
+    - **Core Components**: `media-service`, `storage-sdk`, `worker`.
+    - **Tech**: **MinIO** (S3-compatible), BullMQ (Job queue), Redis.
+    - **Features**: Image/Video upload, CDN integration, Thumbnail generation.
 
     ### Phase 2: Social Core
     - **Goal**: Interaction engine (Feed, Follow, Comment).

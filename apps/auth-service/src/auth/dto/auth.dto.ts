@@ -7,6 +7,14 @@ export class RegisterDto {
   @IsString()
   @MinLength(8)
   password!: string;
+
+  @IsString()
+  @MinLength(3)
+  username!: string;
+
+  @IsString()
+  @MinLength(1)
+  displayName!: string;
 }
 
 export class LoginDto {

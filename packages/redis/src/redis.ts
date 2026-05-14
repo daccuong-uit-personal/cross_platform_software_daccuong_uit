@@ -26,7 +26,7 @@ export function createRedisClient(options: RedisClientOptions = {}): Redis {
     maxRetriesPerRequest: 3,
     retryStrategy: enableAutoReconnect
       ? (times) => Math.min(times * 100, 3000) // exponential backoff capped at 3s
-      : null,
+      : undefined,
     ...rest,
   };
 

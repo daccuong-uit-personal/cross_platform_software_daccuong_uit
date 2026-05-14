@@ -17,6 +17,7 @@
     - Consistent error format.
     - Standardized pagination.
     - JWT propagation and cross-service validation.
+    - **Database Naming**: Use `snake_case` for all database objects (tables, columns, indexes). In Prisma, use `@@map` and `@map` to enforce this.
 6. **Async Integrity**:
     - Every event must be versioned.
     - Consumers must be idempotent.

@@ -51,14 +51,26 @@ export class IdentityProxyController {
   }
 
   /**
-   * GET /v1/profiles/:username
+   * GET /v1/profiles/username/:username
    * Public profile lookup — no auth required.
    */
-  @Get(':username')
-  getProfile(@Param('username') username: string) {
+  @Get('username/:username')
+  getProfileByUsername(@Param('username') username: string) {
     return this.proxy.forward(
       'GET',
       `${appConfig.IDENTITY_SERVICE_URL}/profiles/username/${username}`,
+    );
+  }
+
+  /**
+   * GET /v1/profiles/user/:userId
+   * Profile lookup by Account ID.
+   */
+  @Get('user/:userId')
+  getProfileByUserId(@Param('userId') userId: string) {
+    return this.proxy.forward(
+      'GET',
+      `${appConfig.IDENTITY_SERVICE_URL}/profiles/user/${userId}`,
     );
   }
 

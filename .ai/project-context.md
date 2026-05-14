@@ -13,3 +13,4 @@ Never violate:
 - DB ownership
 - service boundary
 - trace propagation
+- database snake_case naming (use @map/@@map in Prisma)
