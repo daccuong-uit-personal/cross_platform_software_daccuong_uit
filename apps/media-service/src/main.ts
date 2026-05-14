@@ -1,24 +1,23 @@
 import { initTracing } from '@platform/tracing';
-initTracing({ serviceName: 'identity-service' });
+
+// Must be called BEFORE any other imports to auto-instrument HTTP/DB calls
+initTracing({ serviceName: 'media-service' });
 
 import { NestFactory } from '@nestjs/core';
-import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { appConfig } from './config/app.config';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule,
-    new FastifyAdapter({ logger: false }),
-  );
+  const app = await NestFactory.create(AppModule);
 
+  // Swagger setup
   const config = new DocumentBuilder()
-    .setTitle('Identity Service')
-    .setDescription('Identity and Profile Service API')
+    .setTitle('Media Service')
+    .setDescription('The Media Service API description')
     .setVersion('1.0')
-    .addTag('identity')
+    .addTag('media')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
@@ -31,10 +30,13 @@ async function bootstrap() {
     }),
   );
 
-  app.enableCors({ origin: appConfig.CORS_ORIGIN, credentials: true });
+  app.enableCors({
+    origin: appConfig.CORS_ORIGIN,
+    credentials: true,
+  });
 
   await app.listen(appConfig.PORT, '0.0.0.0');
-  console.log(`[identity-service] Listening on port ${appConfig.PORT}`);
+  console.log(`[media-service] Listening on port ${appConfig.PORT}`);
 }
 
 bootstrap();

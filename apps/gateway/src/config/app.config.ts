@@ -8,6 +8,7 @@ const GatewayEnvSchema = BaseEnvSchema.extend({
   JWT_ACCESS_SECRET: z.string().min(32),
   AUTH_SERVICE_URL: z.string().url().default('http://localhost:3001'),
   IDENTITY_SERVICE_URL: z.string().url().default('http://localhost:3002'),
+  MEDIA_SERVICE_URL: z.string().url().default('http://localhost:3003'),
   CORS_ORIGIN: z.string().default('*'),
   RATE_LIMIT_TTL: z.coerce.number().default(60),
   RATE_LIMIT_LIMIT: z.coerce.number().default(100),

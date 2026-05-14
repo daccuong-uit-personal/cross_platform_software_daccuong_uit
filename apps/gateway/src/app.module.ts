@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthProxyModule } from './auth-proxy/auth-proxy.module';
 import { IdentityProxyModule } from './identity-proxy/identity-proxy.module';
+import { MediaProxyModule } from './media-proxy/media-proxy.module';
 import { HealthModule } from './health/health.module';
 import { appConfig } from './config/app.config';
 
@@ -15,6 +16,7 @@ import { appConfig } from './config/app.config';
     ]),
     AuthProxyModule,
     IdentityProxyModule,
+    MediaProxyModule,
     HealthModule,
   ],
 })

@@ -1,0 +1,652 @@
+{
+	"info": {
+		"_postman_id": "fea95a73-e2bd-46c0-ae95-fd0d77b95571",
+		"name": "Media Microservices System",
+		"description": "Collection for Auth, Identity, and Media Services via Gateway",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Register",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"user@example.com\",\n    \"password\": \"password123\",\n    \"username\": \"johndoe\",\n    \"displayName\": \"John Doe\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData.accessToken) {",
+									"    pm.environment.set(\"token\", jsonData.accessToken);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"user@example.com\",\n    \"password\": \"password123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refreshToken\": \"paste-refresh-token-here\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/refresh",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"refresh"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Profiles",
+			"item": [
+				{
+					"name": "Get My Profile",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/profiles/me",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"profiles",
+								"me"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update My Profile",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"displayName\": \"John Updated\",\n    \"bio\": \"New bio information\",\n    \"avatarUrl\": \"https://example.com/avatar.jpg\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/profiles/me",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"profiles",
+								"me"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Profile By Username",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/profiles/username/johndoe",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"profiles",
+								"username",
+								"johndoe"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Media",
+			"item": [
+				{
+					"name": "Upload Multipart",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/media/upload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								"upload"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Upload Base64",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"originalName\": \"test.png\",\n    \"base64\": \"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/upload-base64",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								"upload-base64"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Upload Stream",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-original-name",
+								"value": "movie.mp4",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/octet-stream",
+								"description": "Change this to match your file type (e.g. application/msword for .doc)",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "file",
+							"file": {
+								"src": ""
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/upload-stream",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								"upload-stream"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Media Metadata",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/media/:id",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "replace-with-media-id"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Media Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/media/:id/info",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								":id",
+								"info"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "replace-with-media-id"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Thumbnail",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/media/:id/thumbnail",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								":id",
+								"thumbnail"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "replace-with-media-id"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Media Base64",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/media/:id/base64",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								":id",
+								"base64"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "replace-with-media-id"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Raw File",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/media/:id/file",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								":id",
+								"file"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "replace-with-media-id"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Stream File",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/media/:id/stream",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								":id",
+								"stream"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "replace-with-media-id"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get HLS Playlist",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/media/:id/hls/index.m3u8",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								":id",
+								"hls",
+								"index.m3u8"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "replace-with-media-id"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Download URL",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/media/:id/download",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								":id",
+								"download"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "replace-with-media-id"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Media",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/media/:id",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "replace-with-media-id"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Health Checks",
+			"item": [
+				{
+					"name": "Gateway Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:3000/health",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Auth Service Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:3001/health",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3001",
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Identity Service Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:3002/health",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3002",
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Media Service Health (Direct)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:3003/health",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3003",
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000/v1",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

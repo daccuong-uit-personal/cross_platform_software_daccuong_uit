@@ -6,14 +6,24 @@ initTracing({ serviceName: 'auth-service' });
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { appConfig } from './config/app.config';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: false }), // NestJS logger handles this
+    new FastifyAdapter({ logger: false }),
   );
+
+  const config = new DocumentBuilder()
+    .setTitle('Auth Service')
+    .setDescription('Authentication Service API')
+    .setVersion('1.0')
+    .addTag('auth')
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('docs', app, document);
 
   app.useGlobalPipes(
     new ValidationPipe({
