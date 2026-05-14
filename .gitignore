@@ -40,3 +40,6 @@ infra/docker/mongo_data/
 # Temporary
 tmp/
 temp/
+
+# Turbo
+.turbo/
