@@ -127,6 +127,90 @@ export class MediaService {
     return media;
   }
 
+  async listMedia(query: {
+    userId?: string;
+    status?: string;
+    type?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<Media[]> {
+    const where: any = {};
+
+    if (query.userId) {
+      where.user_id = query.userId;
+    }
+
+    if (query.status) {
+      where.status = query.status;
+    }
+
+    if (query.type) {
+      if (query.type === 'image' || query.type === 'video' || query.type === 'audio') {
+        where.mime_type = { startsWith: `${query.type}/` };
+      } else if (query.type === 'file') {
+        where.NOT = [
+          { mime_type: { startsWith: 'image/' } },
+          { mime_type: { startsWith: 'video/' } },
+          { mime_type: { startsWith: 'audio/' } },
+        ];
+      }
+    }
+
+    const page = query.page && query.page > 0 ? query.page : 1;
+    const limit = query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 20;
+    const skip = (page - 1) * limit;
+
+    return this.prisma.media.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+      skip,
+      take: limit,
+    });
+  }
+
+  async getStatus(id: string): Promise<{ id: string; status: string; metadata: any; mime_type: string; created_at: Date } > {
+    const media = await this.getMedia(id);
+    return {
+      id: media.id,
+      status: media.status,
+      metadata: media.metadata,
+      mime_type: media.mime_type,
+      created_at: media.created_at,
+    };
+  }
+
+  async getPreview(id: string): Promise<any> {
+    const media = await this.getMedia(id);
+    const metadata = media.metadata as any;
+    const downloadUrl = await this.getDownloadUrl(id);
+
+    return {
+      id: media.id,
+      fileName: media.file_name,
+      originalName: media.original_name,
+      mimeType: media.mime_type,
+      fileSize: media.file_size.toString(),
+      status: media.status,
+      thumbnailPath: metadata?.thumbnail || null,
+      hlsPath: metadata?.hls_path || null,
+      processedPath: metadata?.processed_path || null,
+      metadata: metadata || {},
+      downloadUrl,
+      createdAt: media.created_at,
+    };
+  }
+
+  async reprocessMedia(id: string): Promise<Media> {
+    const media = await this.getMedia(id);
+    const updated = await this.updateStatus(id, 'pending');
+    await this.mediaQueue.add('process', {
+      mediaId: media.id,
+      storagePath: media.storage_path,
+      mimeType: media.mime_type,
+    });
+    return updated;
+  }
+
   async getMedia(id: string): Promise<Media> {
     const media = await this.prisma.media.findUnique({ where: { id } });
     if (!media) throw new NotFoundException('Media not found');

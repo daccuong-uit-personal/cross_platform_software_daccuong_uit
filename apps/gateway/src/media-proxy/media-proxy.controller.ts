@@ -1,7 +1,7 @@
-import { Controller, Post, Get, Delete, Param, Req, Body, Res, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Param, Req, Body, Res, Query, UseGuards } from '@nestjs/common';
 import { HttpProxyService } from '../common/services/http-proxy.service';
 import { appConfig } from '../config/app.config';
-import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiResponse, ApiHeader, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiResponse, ApiHeader, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 @ApiTags('media')
@@ -90,6 +90,50 @@ export class MediaProxyController {
 
     const data = await response.json();
     res.status(response.status).send(data);
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'List media items' })
+  @ApiQuery({ name: 'userId', required: false, type: 'string' })
+  @ApiQuery({ name: 'status', required: false, type: 'string', enum: ['pending', 'processing', 'ready', 'failed'] })
+  @ApiQuery({ name: 'type', required: false, type: 'string', enum: ['image', 'video', 'audio', 'file'] })
+  @ApiQuery({ name: 'page', required: false, type: 'number' })
+  @ApiQuery({ name: 'limit', required: false, type: 'number' })
+  async listMedia(
+    @Query('userId') userId?: string,
+    @Query('status') status?: string,
+    @Query('type') type?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const url = new URL(`${appConfig.MEDIA_SERVICE_URL}/media`);
+    if (userId) url.searchParams.set('userId', userId);
+    if (status) url.searchParams.set('status', status);
+    if (type) url.searchParams.set('type', type);
+    if (page) url.searchParams.set('page', page);
+    if (limit) url.searchParams.set('limit', limit);
+
+    return this.proxy.forward('GET', url.toString());
+  }
+
+  @Get(':id/status')
+  @ApiOperation({ summary: 'Get media processing status' })
+  async getStatus(@Param('id') id: string) {
+    return this.proxy.forward('GET', `${appConfig.MEDIA_SERVICE_URL}/media/${id}/status`);
+  }
+
+  @Get(':id/preview')
+  @ApiOperation({ summary: 'Get media preview info' })
+  async getPreview(@Param('id') id: string) {
+    return this.proxy.forward('GET', `${appConfig.MEDIA_SERVICE_URL}/media/${id}/preview`);
+  }
+
+  @Post(':id/reprocess')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Reprocess media file' })
+  async reprocessMedia(@Param('id') id: string) {
+    return this.proxy.forward('POST', `${appConfig.MEDIA_SERVICE_URL}/media/${id}/reprocess`);
   }
 
   @Get('health')

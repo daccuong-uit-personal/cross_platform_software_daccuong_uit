@@ -12,6 +12,11 @@ build/
 .next/
 out/
 
+# TypeScript emitted artifacts in package source folders
+packages/*/src/**/*.js
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.map
+
 # Environment Variables
 .env
 .env.local

@@ -4,6 +4,7 @@ import {
   Get,
   Delete,
   Param,
+  Query,
   UseInterceptors,
   UploadedFile,
   ParseUUIDPipe,
@@ -15,7 +16,7 @@ import {
 } from '@nestjs/common';
 import { Response, Request } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiResponse, ApiHeader } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiResponse, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { MediaService } from './media.service';
 
 @ApiTags('media')
@@ -123,6 +124,64 @@ export class MediaController {
       status: media.status,
       createdAt: media.created_at,
     };
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'List media items' })
+  @ApiQuery({ name: 'userId', required: false, type: 'string' })
+  @ApiQuery({ name: 'status', required: false, type: 'string', enum: ['pending', 'processing', 'ready', 'failed'] })
+  @ApiQuery({ name: 'type', required: false, type: 'string', enum: ['image', 'video', 'audio', 'file'] })
+  @ApiQuery({ name: 'page', required: false, type: 'number' })
+  @ApiQuery({ name: 'limit', required: false, type: 'number' })
+  async listMedia(
+    @Query('userId') userId?: string,
+    @Query('status') status?: string,
+    @Query('type') type?: string,
+    @Query('page') page = '1',
+    @Query('limit') limit = '20',
+  ) {
+    const pageNumber = Math.max(1, Number(page) || 1);
+    const limitNumber = Math.min(100, Math.max(1, Number(limit) || 20));
+    const items = await this.mediaService.listMedia({
+      userId,
+      status,
+      type,
+      page: pageNumber,
+      limit: limitNumber,
+    });
+
+    return {
+      items: items.map((media) => ({
+        id: media.id,
+        fileName: media.file_name,
+        originalName: media.original_name,
+        mimeType: media.mime_type,
+        fileSize: media.file_size.toString(),
+        status: media.status,
+        createdAt: media.created_at,
+      })),
+      page: pageNumber,
+      limit: limitNumber,
+      count: items.length,
+    };
+  }
+
+  @Get(':id/status')
+  @ApiOperation({ summary: 'Get media processing status' })
+  async getStatus(@Param('id', ParseUUIDPipe) id: string) {
+    return this.mediaService.getStatus(id);
+  }
+
+  @Get(':id/preview')
+  @ApiOperation({ summary: 'Get preview information for media' })
+  async getPreview(@Param('id', ParseUUIDPipe) id: string) {
+    return this.mediaService.getPreview(id);
+  }
+
+  @Post(':id/reprocess')
+  @ApiOperation({ summary: 'Reprocess media file' })
+  async reprocessMedia(@Param('id', ParseUUIDPipe) id: string) {
+    return this.mediaService.reprocessMedia(id);
   }
 
   @Get(':id')

@@ -2,14 +2,15 @@
 
 This repository contains the full source code and architectural blueprints for a production-oriented Social + Commerce + Creator platform.
 
-## 🚀 Current Status: Phase 0 (Foundation Platform) ✅
+## 🚀 Current Status: Phase 1 (Media Platform) ✅
 
-We have successfully established the foundational infrastructure and core identity services.
+We have successfully established the foundational infrastructure, core identity services, and media handling capabilities.
 
 ### 🛠️ Core Services (Implemented)
 - **API Gateway (Port 3000)**: Central entry point with rate limiting, tracing, and proxy routing.
 - **Auth Service (Port 3001)**: Handles registration, login, and JWT management (Access & Refresh tokens).
 - **Identity Service (Port 3002)**: Manages user profiles and account metadata.
+- **Media Service (Port 3003)**: Handles media upload, storage, processing, and streaming (images, videos).
 
 ### 📦 Shared Packages
 - `@platform/logger`: Standardized Pino-based logging.
@@ -23,6 +24,7 @@ We have successfully established the foundational infrastructure and core identi
 - **PostgreSQL 15**: Primary relational database.
 - **Redis 7**: Caching and Pub/Sub.
 - **MongoDB 6**: Document store (for Phase 2 social data).
+- **MinIO**: S3-compatible object storage for media files.
 - **Jaeger**: Distributed tracing UI (Port 16686).
 - **Docker Compose**: Orchestrates all infrastructure components.
 
@@ -45,11 +47,27 @@ We have successfully established the foundational infrastructure and core identi
 - Postman (for testing)
 
 ### 2. Environment Setup
-Copy the example environment files:
+Copy the example environment files and update them for your local environment:
 ```bash
 cp .env.example .env
 cp infra/docker/.env.example infra/docker/.env
 ```
+
+The root `.env.example` contains shared service configuration for:
+- `Auth Service`
+- `Identity Service`
+- `Media Service`
+- `Gateway`
+- local infrastructure (Postgres, Redis, MongoDB, MinIO)
+
+Update the following values as needed:
+- `NODE_ENV`: `development` for local dev, `production` for production.
+- `LOG_LEVEL`: log verbosity, e.g. `info`, `debug`, or `error`.
+- `AUTH_DATABASE_URL`, `IDENTITY_DATABASE_URL`, `MEDIA_DATABASE_URL`: change host/user/password/db/schema when using a different database.
+- `AUTH_REDIS_URL` / `REDIS_URL`: update when Redis is not on localhost or uses a different password.
+- `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`: replace with secure random secrets in production.
+- `CORS_ORIGIN`: set to your frontend origin in production instead of `http://localhost:5173`.
+- `AUTH_SERVICE_URL`, `IDENTITY_SERVICE_URL`, `MEDIA_SERVICE_URL`: point to the actual deployed service URLs when not running locally.
 
 ### 3. Start Infrastructure
 Launch the databases and cache systems:
@@ -77,6 +95,8 @@ We have provided a Postman collection for testing the core flows.
    - `POST /v1/auth/register`: Create a new user.
    - `POST /v1/auth/login`: Get access and refresh tokens.
    - `GET /v1/profiles/user/:userId`: Fetch profile data (needs Bearer token).
+
+You can also use the Media Service docs at `docs/api/media-service.md` and the Postman collection at `docs/postman/media-service.postman_collection.json`.
 
 ---
 
