@@ -24,6 +24,7 @@
     "@nestjs/throttler": "^5.0.0",
     "@platform/auth-sdk": "*",
     "@platform/config": "*",
+    "@platform/common": "*",
     "@platform/db": "*",
     "@platform/logger": "*",
     "@platform/redis": "*",

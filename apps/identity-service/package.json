@@ -20,6 +20,7 @@
     "@nestjs/swagger": "^7.0.0",
     "@fastify/static": "^6.0.0",
     "@platform/auth-sdk": "*",
+    "@platform/common": "*",
     "@platform/config": "*",
     "@platform/logger": "*",
     "@platform/tracing": "*",
