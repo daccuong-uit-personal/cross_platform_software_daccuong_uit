@@ -213,7 +213,7 @@ export class MediaService {
 
   async getMedia(id: string): Promise<Media> {
     const media = await this.prisma.media.findUnique({ where: { id } });
-    if (!media) throw new NotFoundException('Media not found');
+    if (!media) throw new NotFoundException('Không tìm thấy tệp media');
     return media;
   }
 

@@ -5,7 +5,7 @@ initTracing({ serviceName: 'auth-service' });
 
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, BadRequestException } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { appConfig } from './config/app.config';
@@ -31,6 +31,21 @@ async function bootstrap() {
       whitelist: true,       // Strip unknown properties
       forbidNonWhitelisted: true,
       transform: true,       // Auto-transform to DTO class instances
+      exceptionFactory: (errors) => {
+        // Convert class-validator errors to our API contract format
+        const fieldErrors: Record<string, string[]> = {};
+
+        errors.forEach((error) => {
+          if (error.property && error.constraints) {
+            fieldErrors[error.property] = Object.values(error.constraints);
+          }
+        });
+
+        return new BadRequestException({
+          message: 'Thông tin đầu vào không hợp lệ',
+          errors: fieldErrors,
+        });
+      },
     }),
   );
 

@@ -6,43 +6,66 @@
 - **Sub-resources**: `/posts/:id/comments` for related data.
 - **Versioning**: Prefix all APIs with `/v1/`.
 
-## 📦 Response Structure
+## 📦 Response Structure (Unified Contract with FE)
+*Note: This strictly follows the FE `api-contract.md` to ensure seamless communication.*
 
 ### Success Response
 ```json
 {
-  "success": true,
+  "statusCode": 200,
+  "message": "Human readable message for FE toast (optional)",
   "data": {
     "id": "...",
     "..." : "..."
   },
   "meta": {
-    "timestamp": "2024-01-01T00:00:00Z",
-    "pagination": {
-      "total": 100,
-      "page": 1,
-      "limit": 20,
-      "next_cursor": "..."
-    }
+    "timestamp": "2026-05-16T12:00:00.000Z",
+    "path": "/v1/resource"
   }
 }
 ```
+**Rule**: Absolutely no double wrapping (`data.data`). The core payload must be directly inside `data`.
 
 ### Error Response
 ```json
 {
-  "success": false,
-  "error": {
-    "code": "DOMAIN_ERROR_CODE",
-    "message": "Human readable message",
-    "details": {},
-    "trace_id": "req-123-abc"
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "Human readable message for FE error toast",
+  "path": "/v1/resource",
+  "timestamp": "2026-05-16T12:00:00.000Z",
+  "errors": {
+    "field_name": ["Validation error message"]
+  },
+  "trace_id": "req-123-abc"
+}
+```
+**Rules**:
+- `statusCode` inside body MUST match the HTTP Status Code.
+- `message` must be a user-friendly string, not stack traces or raw codes.
+- `errors` is used for validation issues (400) mapped by field name.
+
+## 🔢 Pagination
+### Format
+```json
+{
+  "statusCode": 200,
+  "data": [
+    { "id": "1", "title": "..." }
+  ],
+  "meta": {
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 5,
+      "totalItems": 50,
+      "itemsPerPage": 10,
+      "hasNext": true
+    },
+    "timestamp": "2026-05-16T12:00:00.000Z"
   }
 }
 ```
-
-## 🔢 Pagination
-- **Cursor-based**: Preferred for feeds and high-frequency data to avoid "drifting" pages.
+- **Cursor-based**: Preferred for feeds and high-frequency data to avoid "drifting" pages (can append `nextCursor` to `meta.pagination`).
 - **Offset-based**: Acceptable for static/admin tables only.
 
 ## 🛡️ Security & Auth

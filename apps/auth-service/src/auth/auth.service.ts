@@ -32,7 +32,7 @@ export class AuthService {
     });
 
     if (existing) {
-      throw new ConflictException('An account with this email already exists.');
+      throw new ConflictException('Email đã tồn tại trong hệ thống');
     }
 
     const passwordHash = await argon2.hash(dto.password);
@@ -48,7 +48,7 @@ export class AuthService {
     logger.info('Account registered', { accountId: account.id });
 
     const tokens = jwtService.signTokenPair(account.id, account.email, randomUUID());
-    return { accountId: account.id, ...tokens };
+    return { message: 'Đăng ký tài khoản thành công', accountId: account.id, ...tokens };
   }
 
   async login(dto: LoginDto) {
@@ -57,22 +57,22 @@ export class AuthService {
     });
 
     if (!account) {
-      throw new UnauthorizedException(AuthErrorCode.INVALID_CREDENTIALS);
+      throw new UnauthorizedException('Email hoặc mật khẩu không chính xác');
     }
 
     if (account.status === 'BANNED') {
-      throw new UnauthorizedException(AuthErrorCode.ACCOUNT_BANNED);
+      throw new UnauthorizedException('Tài khoản của bạn đã bị khóa');
     }
 
     const isValid = await argon2.verify(account.passwordHash, dto.password);
     if (!isValid) {
-      throw new UnauthorizedException(AuthErrorCode.INVALID_CREDENTIALS);
+      throw new UnauthorizedException('Email hoặc mật khẩu không chính xác');
     }
 
     logger.info('Account logged in', { accountId: account.id });
 
     const tokens = jwtService.signTokenPair(account.id, account.email, randomUUID());
-    return { accountId: account.id, ...tokens };
+    return { message: 'Đăng nhập thành công', accountId: account.id, ...tokens };
   }
 
   async refresh(refreshToken: string) {
@@ -84,15 +84,15 @@ export class AuthService {
       });
 
       if (!account) {
-        throw new NotFoundException(AuthErrorCode.ACCOUNT_NOT_FOUND);
+        throw new NotFoundException('Tài khoản không tồn tại');
       }
 
       if (account.status === 'BANNED') {
-        throw new UnauthorizedException(AuthErrorCode.ACCOUNT_BANNED);
+        throw new UnauthorizedException('Tài khoản của bạn đã bị khóa');
       }
 
       const tokens = jwtService.signTokenPair(account.id, account.email, randomUUID());
-      return tokens;
+      return { message: 'Làm mới token thành công', ...tokens };
     } catch (err: unknown) {
       if (
         err instanceof ConflictException ||
@@ -101,7 +101,7 @@ export class AuthService {
       ) {
         throw err;
       }
-      throw new UnauthorizedException(AuthErrorCode.INVALID_TOKEN);
+      throw new UnauthorizedException('Token xác thực không hợp lệ hoặc đã hết hạn');
     }
   }
 
@@ -112,7 +112,7 @@ export class AuthService {
     });
 
     if (!account) {
-      throw new NotFoundException(AuthErrorCode.ACCOUNT_NOT_FOUND);
+      throw new NotFoundException('Tài khoản không tồn tại');
     }
 
     return account;

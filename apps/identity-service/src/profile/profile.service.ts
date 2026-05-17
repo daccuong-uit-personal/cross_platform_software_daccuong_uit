@@ -20,10 +20,10 @@ export class ProfileService {
     ]);
 
     if (existingUser) {
-      throw new ConflictException('A profile already exists for this user.');
+      throw new ConflictException('Hồ sơ người dùng đã tồn tại');
     }
     if (existingUsername) {
-      throw new ConflictException('This username is already taken.');
+      throw new ConflictException('Tên người dùng đã được sử dụng');
     }
 
     const profile = await this.prisma.profile.create({
@@ -35,7 +35,7 @@ export class ProfileService {
     });
 
     logger.info('Profile created', { profileId: profile.id, userId: dto.userId });
-    return profile;
+    return { message: 'Tạo hồ sơ thành công', ...profile };
   }
 
   async getProfileByUsername(username: string) {
@@ -44,7 +44,7 @@ export class ProfileService {
     });
 
     if (!profile) {
-      throw new NotFoundException(`Profile '@${username}' not found.`);
+      throw new NotFoundException(`Không tìm thấy hồ sơ của @${username}`);
     }
 
     return profile;
@@ -56,7 +56,7 @@ export class ProfileService {
     });
 
     if (!profile) {
-      throw new NotFoundException('Profile not found for this user.');
+      throw new NotFoundException('Hồ sơ người dùng không tồn tại');
     }
 
     return profile;
@@ -68,7 +68,7 @@ export class ProfileService {
     });
 
     if (!profile) {
-      throw new NotFoundException('Profile not found.');
+      throw new NotFoundException('Hồ sơ người dùng không tồn tại');
     }
 
     const updated = await this.prisma.profile.update({
@@ -77,6 +77,6 @@ export class ProfileService {
     });
 
     logger.info('Profile updated', { profileId: updated.id });
-    return updated;
+    return { message: 'Cập nhật hồ sơ thành công', ...updated };
   }
 }
