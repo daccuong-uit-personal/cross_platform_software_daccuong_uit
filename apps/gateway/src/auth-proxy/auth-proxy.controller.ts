@@ -14,12 +14,14 @@ export class AuthProxyController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['email', 'password', 'username'],
+      required: ['username'],
       properties: {
         email: { type: 'string', format: 'email' },
         password: { type: 'string', minLength: 6 },
         username: { type: 'string' },
         displayName: { type: 'string' },
+        phoneNumber: { type: 'string' },
+        otp: { type: 'string' },
       },
     },
   })
@@ -32,6 +34,8 @@ export class AuthProxyController {
         password: body.password,
         username: body.username,
         displayName: body.displayName,
+        phoneNumber: body.phoneNumber,
+        otp: body.otp,
       },
     });
 
@@ -57,16 +61,34 @@ export class AuthProxyController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['email', 'password'],
       properties: {
         email: { type: 'string' },
         password: { type: 'string' },
+        phoneNumber: { type: 'string' },
+        otp: { type: 'string' },
       },
     },
   })
   @ApiResponse({ status: 200, description: 'Login successful, returns tokens' })
   login(@Body() body: unknown) {
     return this.proxy.forward('POST', `${appConfig.AUTH_SERVICE_URL}/auth/login`, { body });
+  }
+
+  @Post('send-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request OTP for phone number' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['phoneNumber'],
+      properties: {
+        phoneNumber: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'OTP sent successfully' })
+  sendOtp(@Body() body: unknown) {
+    return this.proxy.forward('POST', `${appConfig.AUTH_SERVICE_URL}/auth/send-otp`, { body });
   }
 
   @Post('refresh')

@@ -11,12 +11,16 @@ datasource db {
 }
 
 model Account {
-  id           String        @id @default(uuid())
-  email        String        @unique
-  passwordHash String        @map("password_hash")
-  status       AccountStatus @default(PENDING)
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
+  id                    String                 @id @default(uuid())
+  email                 String?                @unique
+  phoneNumber           String?                @unique @map("phone_number")
+  passwordHash          String?                @map("password_hash")
+  username              String                 @unique
+  displayName           String                 @map("display_name")
+  preferredContactMethod ContactMethod?        @default(EMAIL) @map("preferred_contact_method")
+  status                AccountStatus          @default(PENDING)
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
 
   @@map("accounts")
 }
@@ -26,4 +30,9 @@ enum AccountStatus {
   ACTIVE
   BANNED
   DELETED
+}
+
+enum ContactMethod {
+  EMAIL
+  PHONE
 }
