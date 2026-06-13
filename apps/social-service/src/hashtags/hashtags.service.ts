@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HashtagsQueryDto, HashtagContentQueryDto, HashtagContentType } from './dto/hashtag.dto';
+import { PostVisibility } from '@prisma/client-social';
 
 @Injectable()
 export class HashtagsService {
@@ -63,14 +64,8 @@ export class HashtagsService {
     const { page = 1, pageSize = 20, type = HashtagContentType.ALL } = query;
     const hashtagName = name.toLowerCase().replace('#', '');
 
-    // Depending on type, we fetch from different tables. 
-    // For simplicity, if ALL, we might fetch from Posts and Reels and merge, 
-    // but pagination merging is hard in SQL. 
-    // Usually, TikTok/Insta defaults to Reels or Posts. We will implement specifically.
-    
-    // For this example, let's just return posts if ALL or POST
     if (type === HashtagContentType.POST || type === HashtagContentType.ALL) {
-      const where = { hashtags: { has: hashtagName }, isDeleted: false, visibility: 'PUBLIC' };
+      const where = { hashtags: { has: hashtagName }, isDeleted: false, visibility: PostVisibility.PUBLIC };
       const [total, posts] = await Promise.all([
         this.prisma.post.count({ where }),
         this.prisma.post.findMany({
@@ -83,7 +78,7 @@ export class HashtagsService {
       ]);
 
       return {
-        data: posts.map(p => ({
+        data: posts.map((p: any) => ({
           id: p.id,
           type: 'post',
           content: p.content,
@@ -94,11 +89,9 @@ export class HashtagsService {
       };
     }
 
-    // Logic for REEL and VIDEO can be added similarly here.
     return { data: [], meta: { pagination: this.buildPagination(page, pageSize, 0) } };
   }
 
-  // Internal method to increment counters (called via Message Queue or direct injection in future)
   async incrementHashtagCount(tags: string[], type: 'post' | 'reel' | 'video') {
     for (const tag of tags) {
       const name = tag.toLowerCase();
