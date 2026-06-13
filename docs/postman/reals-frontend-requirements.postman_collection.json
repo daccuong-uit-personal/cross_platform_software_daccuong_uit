@@ -1,0 +1,163 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-1234-56789abcdef0",
+    "name": "Reals Frontend Required APIs",
+    "description": "Tổng hợp các API Frontend yêu cầu (bao gồm API đã có và API đang thiếu cần bổ sung) từ sau luồng Login -> Profile -> Home -> Studio.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Authentication (Đã có)",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"Password123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["v1", "auth", "login"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Profile (Đã có)",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/v1/profiles/me", "host": ["{{baseUrl}}"], "path": ["v1", "profiles", "me"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"New Name\",\n  \"username\": \"newuser\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/v1/profiles/me", "host": ["{{baseUrl}}"], "path": ["v1", "profiles", "me"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Home Feed & Discover (CẦN BỔ SUNG)",
+      "item": [
+        {
+          "name": "Get Timeline Feed",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/feed?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "feed"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "Lấy danh sách bài viết trang chủ. Res: { items: [{ id, content, mediaUrls, author: { id, displayName, avatarUrl }, likesCount, commentsCount, createdAt }], total, page }"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Reels (Short Videos)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/reels?page=1&limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "reels"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "5" }
+              ]
+            },
+            "description": "Lấy danh sách video ngắn (Reels). Res: { items: [{ id, videoUrl, thumbnailUrl, caption, author: { ... }, likesCount }], nextCursor }"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Social Interactions (CẦN BỔ SUNG)",
+      "item": [
+        {
+          "name": "Get Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/v1/notifications", "host": ["{{baseUrl}}"], "path": ["v1", "notifications"] },
+            "description": "Lấy thông báo. Res: { items: [{ id, type, message, isRead, createdAt, link }] }"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Conversations (Chat)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/v1/chats/conversations", "host": ["{{baseUrl}}"], "path": ["v1", "chats", "conversations"] },
+            "description": "Lấy danh sách tin nhắn. Res: { items: [{ id, participants: [...], lastMessage: {...}, unreadCount, updatedAt }] }"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Media Studio (Đã có 1 phần, Cần bổ sung Post)",
+      "item": [
+        {
+          "name": "Create Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Hello world\",\n  \"mediaIds\": [\"uuid-1\", \"uuid-2\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/v1/posts", "host": ["{{baseUrl}}"], "path": ["v1", "posts"] },
+            "description": "Tạo bài viết mới sau khi upload media. Yêu cầu body gồm content và danh sách mediaIds."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
