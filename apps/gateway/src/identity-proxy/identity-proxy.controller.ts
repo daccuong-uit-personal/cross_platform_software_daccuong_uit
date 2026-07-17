@@ -21,7 +21,7 @@ interface AuthenticatedRequest {
 }
 
 @ApiTags('profiles')
-@Controller('v1/profiles')
+@Controller('profiles')
 export class IdentityProxyController {
   constructor(private readonly proxy: HttpProxyService) {}
 

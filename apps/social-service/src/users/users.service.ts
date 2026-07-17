@@ -6,7 +6,6 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { createLogger } from '@platform/logger';
 import {
-  UpdateProfileDto,
   UpdatePrivacySettingsDto,
   UpdateAccountSettingsDto,
 } from './dto/user.dto';
@@ -64,7 +63,7 @@ export class UsersService {
 
     const excludeIds = [
       currentUserId,
-      ...alreadyFollowing.map((f) => f.followingId),
+      ...alreadyFollowing.map((f: { followingId: string }) => f.followingId),
     ];
 
     const users = await this.prisma.userProfile.findMany({
@@ -73,110 +72,7 @@ export class UsersService {
       orderBy: { followerCount: 'desc' },
     });
 
-    return users.map((u) => this.mapProfile(u));
-  }
-
-  // ── Get Profile ──────────────────────────────────────────
-  async getProfile(userId: string, currentUserId?: string) {
-    logger.info('Getting user profile', { userId });
-
-    const user = await this.prisma.userProfile.findUnique({
-      where: { userId },
-    });
-
-    if (!user) {
-      throw new NotFoundException('Người dùng không tồn tại');
-    }
-
-    const profile: any = this.mapProfile(user);
-
-    // Enrich with relationship data if viewer is authenticated
-    if (currentUserId && currentUserId !== userId) {
-      const [follow, friendship, block, mute] = await Promise.all([
-        this.prisma.follow.findUnique({
-          where: {
-            followerId_followingId: {
-              followerId: currentUserId,
-              followingId: userId,
-            },
-          },
-        }),
-        this.prisma.friendship.findFirst({
-          where: {
-            OR: [
-              { initiatorId: currentUserId, receiverId: userId },
-              { initiatorId: userId, receiverId: currentUserId },
-            ],
-            status: 'ACCEPTED',
-          },
-        }),
-        this.prisma.userBlock.findUnique({
-          where: {
-            blockerId_blockedId: {
-              blockerId: currentUserId,
-              blockedId: userId,
-            },
-          },
-        }),
-        this.prisma.userMute.findUnique({
-          where: {
-            muterId_mutedId: {
-              muterId: currentUserId,
-              mutedId: userId,
-            },
-          },
-        }),
-      ]);
-
-      profile.isFollowedByCurrentUser = !!follow && follow.status === 'ACCEPTED';
-      profile.isFollowPending = follow?.status === 'PENDING';
-      profile.isFriend = !!friendship;
-      profile.isBlocked = !!block;
-      profile.isMuted = !!mute;
-    }
-
-    return profile;
-  }
-
-  // ── Update Profile ───────────────────────────────────────
-  async updateProfile(userId: string, dto: UpdateProfileDto) {
-    logger.info('Updating user profile', { userId });
-
-    const user = await this.prisma.userProfile.findUnique({
-      where: { userId },
-    });
-
-    if (!user) {
-      throw new NotFoundException('Người dùng không tồn tại');
-    }
-
-    const updated = await this.prisma.userProfile.update({
-      where: { userId },
-      data: {
-        ...(dto.displayName !== undefined && { displayName: dto.displayName }),
-        ...(dto.bio !== undefined && { bio: dto.bio }),
-        ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl }),
-        ...(dto.coverUrl !== undefined && { coverUrl: dto.coverUrl }),
-        ...(dto.website !== undefined && { website: dto.website }),
-        ...(dto.location !== undefined && { location: dto.location }),
-        ...(dto.isPrivate !== undefined && { isPrivate: dto.isPrivate }),
-      },
-    });
-
-    return this.mapProfile(updated);
-  }
-
-  // ── Profile Tabs ─────────────────────────────────────────
-  async getProfileTabs(userId: string) {
-    logger.info('Getting profile tabs', { userId });
-    // Returns the available content tabs for a user profile page
-    return [
-      { key: 'posts', label: 'Bài đăng', count: 0 },
-      { key: 'reels', label: 'Reels', count: 0 },
-      { key: 'videos', label: 'Videos', count: 0 },
-      { key: 'stories', label: 'Stories', count: 0 },
-      { key: 'novels', label: 'Truyện', count: 0 },
-    ];
+    return users.map((u: any) => this.mapProfile(u));
   }
 
   // ── Block ────────────────────────────────────────────────

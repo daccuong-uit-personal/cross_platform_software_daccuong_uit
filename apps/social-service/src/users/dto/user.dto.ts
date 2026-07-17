@@ -6,6 +6,7 @@ import {
   MaxLength,
   IsEnum,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 
 // ---- Update Profile ----
@@ -116,15 +117,18 @@ export class UpdateAccountSettingsDto {
 export class PaginationQueryDto {
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
+  @Type(() => Number)
   page?: number = 1;
 
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
+  @Type(() => Number)
   pageSize?: number = 20;
 }
 
 export class SuggestionsQueryDto {
   @ApiPropertyOptional({ default: 10 })
   @IsOptional()
+  @Type(() => Number)
   limit?: number = 10;
 }

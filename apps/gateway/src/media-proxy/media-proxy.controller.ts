@@ -5,7 +5,7 @@ import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiResponse, ApiHeader, Ap
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 @ApiTags('media')
-@Controller('v1/media')
+@Controller('media')
 export class MediaProxyController {
   constructor(private readonly proxy: HttpProxyService) {}
 

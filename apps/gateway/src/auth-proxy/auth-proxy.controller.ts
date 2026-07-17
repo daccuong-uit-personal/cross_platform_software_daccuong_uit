@@ -4,7 +4,7 @@ import { appConfig } from '../config/app.config';
 import { ApiTags, ApiOperation, ApiBody, ApiResponse } from '@nestjs/swagger';
 
 @ApiTags('auth')
-@Controller('v1/auth')
+@Controller('auth')
 export class AuthProxyController {
   constructor(private readonly proxy: HttpProxyService) {}
 
