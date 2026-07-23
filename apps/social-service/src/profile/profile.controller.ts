@@ -32,14 +32,6 @@ export class ProfileController {
     return this.profileService.getProfile(targetId, currentUserId);
   }
 
-  @Get(':userId/profile-insights')
-  @ApiOperation({ summary: 'Get profile insights for the sidebar' })
-  @ApiResponse({ status: 200, description: 'Returns profile insights' })
-  getProfileInsights(@Param('userId') userId: string, @CurrentUser() currentUserId?: string) {
-    const targetId = userId === 'me' ? currentUserId : userId;
-    if (!targetId) throw new NotFoundException('Người dùng không tồn tại');
-    return this.profileService.getProfileInsights(targetId);
-  }
 
   @Get(':userId/profile-tabs/:tabId')
   @ApiOperation({ summary: 'Get content for a profile tab' })
@@ -76,12 +68,5 @@ export class ProfileController {
     return this.profileService.updateProfile(targetId, dto);
   }
 
-  @Get(':userId/statistics/weekly')
-  @ApiOperation({ summary: 'Get weekly statistics' })
-  @ApiResponse({ status: 200, description: 'Returns weekly statistics data' })
-  getWeeklyStatistics(@Param('userId') userId: string, @CurrentUser() currentUserId?: string) {
-    const targetId = userId === 'me' ? currentUserId : userId;
-    if (!targetId) throw new NotFoundException('Người dùng không tồn tại');
-    return this.profileService.getWeeklyStatistics(targetId);
-  }
+
 }

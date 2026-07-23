@@ -24,19 +24,53 @@ export class FriendshipService {
     };
   }
 
-  private mapUser(u: any) {
+  private mapUser(u: any, overrides: Record<string, any> = {}) {
+    const { mutualFriends = 0, relationshipDate = null, status = 'accepted', relationshipType = 'friend', ...rest } = overrides;
     return {
-      id: u.userId,
-      username: u.username,
-      displayName: u.displayName,
-      avatarUrl: u.avatarUrl,
-      bio: u.bio,
-      isVerified: u.isVerified,
-      isPrivate: u.isPrivate,
-      followerCount: u.followerCount,
-      followingCount: u.followingCount,
-      postCount: u.postCount,
+      id: u.userId ?? u.id,
+      name: u.displayName ?? u.username ?? u.name ?? 'Unknown',
+      avatar: u.avatarUrl ?? u.avatar ?? null,
+      mutualFriends,
+      relationshipDate,
+      status,
+      relationshipType,
+      ...rest,
     };
+  }
+
+  private async getMutualFriendCount(currentUserId: string, targetId: string) {
+    const [userFriendships, targetFriendships] = await Promise.all([
+      this.prisma.friendship.findMany({
+        where: {
+          OR: [{ initiatorId: currentUserId }, { receiverId: currentUserId }],
+          status: 'ACCEPTED',
+        },
+        select: { initiatorId: true, receiverId: true },
+      }),
+      this.prisma.friendship.findMany({
+        where: {
+          OR: [{ initiatorId: targetId }, { receiverId: targetId }],
+          status: 'ACCEPTED',
+        },
+        select: { initiatorId: true, receiverId: true },
+      }),
+    ]);
+
+    const userFriendIds = new Set(
+      userFriendships.flatMap((entry) => [entry.initiatorId, entry.receiverId]).filter((id) => id !== currentUserId),
+    );
+    const targetFriendIds = new Set(
+      targetFriendships.flatMap((entry) => [entry.initiatorId, entry.receiverId]).filter((id) => id !== targetId),
+    );
+
+    let mutualFriends = 0;
+    targetFriendIds.forEach((id) => {
+      if (userFriendIds.has(id)) {
+        mutualFriends += 1;
+      }
+    });
+
+    return mutualFriends;
   }
 
   // ── Friend List ──────────────────────────────────────────
@@ -62,10 +96,16 @@ export class FriendshipService {
       }),
     ]);
 
-    const friends = friendships.map((f) => {
-      const friend = f.initiatorId === userId ? f.receiver : f.initiator;
-      return this.mapUser(friend);
-    });
+    const friends = await Promise.all(
+      friendships.map(async (f) => {
+        const friend = f.initiatorId === userId ? f.receiver : f.initiator;
+        return this.mapUser(friend, {
+          status: 'accepted',
+          relationshipDate: f.updatedAt,
+          mutualFriends: await this.getMutualFriendCount(userId, friend.userId),
+        });
+      }),
+    );
 
     return {
       data: friends,
@@ -74,8 +114,8 @@ export class FriendshipService {
   }
 
   // ── Suggestions ──────────────────────────────────────────
-  async getSuggestions(userId: string, limit: number) {
-    logger.info('Getting friend suggestions', { userId, limit });
+  async getSuggestions(userId: string, page: number, pageSize: number) {
+    logger.info('Getting friend suggestions', { userId, page, pageSize });
 
     // Get current friend IDs
     const friendships = await this.prisma.friendship.findMany({
@@ -90,16 +130,35 @@ export class FriendshipService {
       [f.initiatorId, f.receiverId].filter((id) => id !== userId),
     );
 
-    // Suggest people who follow the same users (friends-of-friends heuristic)
-    const suggestions = await this.prisma.userProfile.findMany({
-      where: {
-        userId: { notIn: [userId, ...friendIds] },
-      },
-      take: limit,
-      orderBy: { followerCount: 'desc' },
-    });
+    const [total, suggestions] = await Promise.all([
+      this.prisma.userProfile.count({
+        where: {
+          userId: { notIn: [userId, ...friendIds] },
+        },
+      }),
+      this.prisma.userProfile.findMany({
+        where: {
+          userId: { notIn: [userId, ...friendIds] },
+        },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { followerCount: 'desc' },
+      }),
+    ]);
 
-    return suggestions.map((u) => this.mapUser(u));
+    const data = await Promise.all(
+      suggestions.map(async (u) =>
+        this.mapUser(u, {
+          status: 'suggested',
+          mutualFriends: await this.getMutualFriendCount(userId, u.userId),
+        }),
+      ),
+    );
+
+    return {
+      data,
+      meta: { pagination: this.buildPagination(page, pageSize, total) },
+    };
   }
 
   // ── Incoming Requests ────────────────────────────────────
@@ -119,8 +178,18 @@ export class FriendshipService {
       }),
     ]);
 
+    const data = await Promise.all(
+      requests.map(async (r) =>
+        this.mapUser(r.initiator, {
+          status: 'pending',
+          relationshipDate: r.createdAt,
+          mutualFriends: await this.getMutualFriendCount(userId, r.initiator.userId),
+        }),
+      ),
+    );
+
     return {
-      data: requests.map((r) => this.mapUser(r.initiator)),
+      data,
       meta: { pagination: this.buildPagination(page, pageSize, total) },
     };
   }
@@ -142,8 +211,18 @@ export class FriendshipService {
       }),
     ]);
 
+    const data = await Promise.all(
+      requests.map(async (r) =>
+        this.mapUser(r.receiver, {
+          status: 'pending',
+          relationshipDate: r.createdAt,
+          mutualFriends: await this.getMutualFriendCount(userId, r.receiver.userId),
+        }),
+      ),
+    );
+
     return {
-      data: requests.map((r) => this.mapUser(r.receiver)),
+      data,
       meta: { pagination: this.buildPagination(page, pageSize, total) },
     };
   }
@@ -249,6 +328,46 @@ export class FriendshipService {
     });
 
     return { message: 'Đã hủy kết bạn' };
+  }
+
+  async getRelationships(userId: string, page: number, pageSize: number) {
+    logger.info('Getting relationships', { userId, page, pageSize });
+
+    const [total, friendships] = await Promise.all([
+      this.prisma.friendship.count({
+        where: {
+          OR: [{ initiatorId: userId }, { receiverId: userId }],
+          status: 'ACCEPTED',
+        },
+      }),
+      this.prisma.friendship.findMany({
+        where: {
+          OR: [{ initiatorId: userId }, { receiverId: userId }],
+          status: 'ACCEPTED',
+        },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: { initiator: true, receiver: true },
+        orderBy: { updatedAt: 'desc' },
+      }),
+    ]);
+
+    const data = await Promise.all(
+      friendships.map(async (f) => {
+        const friend = f.initiatorId === userId ? f.receiver : f.initiator;
+        return this.mapUser(friend, {
+          status: 'accepted',
+          relationshipDate: f.updatedAt,
+          relationshipType: 'friend',
+          mutualFriends: await this.getMutualFriendCount(userId, friend.userId),
+        });
+      }),
+    );
+
+    return {
+      data,
+      meta: { pagination: this.buildPagination(page, pageSize, total) },
+    };
   }
 
   // ── Mutual Friends ───────────────────────────────────────

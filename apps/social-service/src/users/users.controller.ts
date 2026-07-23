@@ -78,6 +78,16 @@ export class UsersController {
     return this.usersService.getBlockedUsers(userId, query.page ?? 1, query.pageSize ?? 20);
   }
 
+  @Get('users/blocked')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Danh sách người dùng đang bị chặn theo route FE' })
+  getBlockedUsersAlias(
+    @CurrentUser() userId: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.usersService.getBlockedUsers(userId, query.page ?? 1, query.pageSize ?? 20);
+  }
+
   // ── Mute ─────────────────────────────────────────────────
   @Post('users/:userId/mute')
   @ApiBearerAuth()
@@ -99,6 +109,16 @@ export class UsersController {
     @CurrentUser() currentUserId: string,
   ) {
     return this.usersService.unmuteUser(currentUserId, userId);
+  }
+
+  @Get('users/muted')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Danh sách người dùng bị mute theo route FE' })
+  getMutedUsersAlias(
+    @CurrentUser() userId: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.usersService.getMutedUsers(userId, query.page ?? 1, query.pageSize ?? 20);
   }
 
   // ── Report ───────────────────────────────────────────────

@@ -3,6 +3,7 @@ import {
   Post,
   Delete,
   Get,
+  Body,
   Param,
   Query,
   HttpCode,
@@ -16,7 +17,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { FollowService } from './follow.service';
-import { PaginationQueryDto } from './dto/follow.dto';
+import { PaginationQueryDto, TargetUserDto } from './dto/follow.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('follow')
@@ -37,6 +38,17 @@ export class FollowController {
     return this.followService.follow(currentUserId, userId);
   }
 
+  @Post('follow')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Follow theo route FE' })
+  followAlias(
+    @Body() dto: TargetUserDto,
+    @CurrentUser() currentUserId: string,
+  ) {
+    return this.followService.follow(currentUserId, dto.targetUserId);
+  }
+
   @Delete('users/:userId/follow')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
@@ -46,6 +58,17 @@ export class FollowController {
     @CurrentUser() currentUserId: string,
   ) {
     return this.followService.unfollow(currentUserId, userId);
+  }
+
+  @Post('follow/unfollow')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Unfollow theo route FE' })
+  unfollowAlias(
+    @Body() dto: TargetUserDto,
+    @CurrentUser() currentUserId: string,
+  ) {
+    return this.followService.unfollow(currentUserId, dto.targetUserId);
   }
 
   // ── Followers / Following ─────────────────────────────────
@@ -58,10 +81,30 @@ export class FollowController {
     return this.followService.getFollowers(userId, query.page ?? 1, query.pageSize ?? 20);
   }
 
+  @Get('follow/followers')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Danh sách followers theo route FE' })
+  getFollowersAlias(
+    @CurrentUser() userId: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.followService.getFollowers(userId, query.page ?? 1, query.pageSize ?? 20);
+  }
+
   @Get('users/:userId/following')
   @ApiOperation({ summary: 'Danh sách đang theo dõi' })
   getFollowing(
     @Param('userId', ParseUUIDPipe) userId: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.followService.getFollowing(userId, query.page ?? 1, query.pageSize ?? 20);
+  }
+
+  @Get('follow/following')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Danh sách đang theo dõi theo route FE' })
+  getFollowingAlias(
+    @CurrentUser() userId: string,
     @Query() query: PaginationQueryDto,
   ) {
     return this.followService.getFollowing(userId, query.page ?? 1, query.pageSize ?? 20);

@@ -248,6 +248,48 @@ export class SocialProxyController {
     });
   }
 
+  @Get('blocked')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get list of blocked users via FE route' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  getBlockedUsersAlias(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    const query = new URLSearchParams();
+    if (page) query.append('page', page);
+    if (pageSize) query.append('pageSize', pageSize);
+    const queryString = query.toString();
+    const url = `${appConfig.SOCIAL_SERVICE_URL}/users/blocked${queryString ? `?${queryString}` : ''}`;
+    return this.proxy.forward('GET', url, {
+      headers: { 'x-user-id': req?.user?.sub || '' },
+    });
+  }
+
+  @Get('muted')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get list of muted users via FE route' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  getMutedUsersAlias(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    const query = new URLSearchParams();
+    if (page) query.append('page', page);
+    if (pageSize) query.append('pageSize', pageSize);
+    const queryString = query.toString();
+    const url = `${appConfig.SOCIAL_SERVICE_URL}/users/muted${queryString ? `?${queryString}` : ''}`;
+    return this.proxy.forward('GET', url, {
+      headers: { 'x-user-id': req?.user?.sub || '' },
+    });
+  }
+
   @Get('me/privacy')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -285,6 +327,219 @@ export class SocialProxyController {
     const userId = req?.user?.sub || '00000000-0000-0000-0000-000000000000';
     return this.proxy.forward('GET', `${appConfig.SOCIAL_SERVICE_URL}/users/me/account-settings`, {
       headers: { 'x-user-id': userId },
+    });
+  }
+
+  @Get('friendship/friends')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get friends via FE route' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  getFriendsAlias(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    const query = new URLSearchParams();
+    if (page) query.append('page', page);
+    if (pageSize) query.append('pageSize', pageSize);
+    const queryString = query.toString();
+    return this.proxy.forward('GET', `${appConfig.SOCIAL_SERVICE_URL}/friendship/friends${queryString ? `?${queryString}` : ''}`, {
+      headers: { 'x-user-id': req?.user?.sub || '' },
+    });
+  }
+
+  @Get('friendship/suggestions')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get friend suggestions via FE route' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  getSuggestionsAlias(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    const query = new URLSearchParams();
+    if (page) query.append('page', page);
+    if (pageSize) query.append('pageSize', pageSize);
+    const queryString = query.toString();
+    return this.proxy.forward('GET', `${appConfig.SOCIAL_SERVICE_URL}/friendship/suggestions${queryString ? `?${queryString}` : ''}`, {
+      headers: { 'x-user-id': req?.user?.sub || '' },
+    });
+  }
+
+  @Get('friendship/requests/received')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get received friend requests via FE route' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  getReceivedRequestsAlias(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    const query = new URLSearchParams();
+    if (page) query.append('page', page);
+    if (pageSize) query.append('pageSize', pageSize);
+    const queryString = query.toString();
+    return this.proxy.forward('GET', `${appConfig.SOCIAL_SERVICE_URL}/friendship/requests/received${queryString ? `?${queryString}` : ''}`, {
+      headers: { 'x-user-id': req?.user?.sub || '' },
+    });
+  }
+
+  @Get('friendship/requests/sent')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get sent friend requests via FE route' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  getSentRequestsAlias(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    const query = new URLSearchParams();
+    if (page) query.append('page', page);
+    if (pageSize) query.append('pageSize', pageSize);
+    const queryString = query.toString();
+    return this.proxy.forward('GET', `${appConfig.SOCIAL_SERVICE_URL}/friendship/requests/sent${queryString ? `?${queryString}` : ''}`, {
+      headers: { 'x-user-id': req?.user?.sub || '' },
+    });
+  }
+
+  @Get('friendship/relationships')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get relationships via FE route' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  getRelationshipsAlias(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    const query = new URLSearchParams();
+    if (page) query.append('page', page);
+    if (pageSize) query.append('pageSize', pageSize);
+    const queryString = query.toString();
+    return this.proxy.forward('GET', `${appConfig.SOCIAL_SERVICE_URL}/friendship/relationships${queryString ? `?${queryString}` : ''}`, {
+      headers: { 'x-user-id': req?.user?.sub || '' },
+    });
+  }
+
+  @Post('friendship/requests')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send friend request via FE route' })
+  sendFriendRequestAlias(
+    @Body() body: { targetUserId: string },
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    return this.proxy.forward('POST', `${appConfig.SOCIAL_SERVICE_URL}/friendship/requests`, {
+      body,
+      headers: { 'x-user-id': req?.user?.sub || '' },
+    });
+  }
+
+  @Post('friendship/requests/:userId/accept')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Accept friend request via FE route' })
+  acceptFriendRequestAlias(
+    @Param('userId') userId: string,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    return this.proxy.forward('POST', `${appConfig.SOCIAL_SERVICE_URL}/friendship/requests/${userId}/accept`, {
+      headers: { 'x-user-id': req?.user?.sub || '' },
+    });
+  }
+
+  @Post('friendship/requests/:userId/decline')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Decline friend request via FE route' })
+  declineFriendRequestAlias(
+    @Param('userId') userId: string,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    return this.proxy.forward('POST', `${appConfig.SOCIAL_SERVICE_URL}/friendship/requests/${userId}/decline`, {
+      headers: { 'x-user-id': req?.user?.sub || '' },
+    });
+  }
+
+  @Post('follow')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Follow via FE route' })
+  followAlias(
+    @Body() body: { targetUserId: string },
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    return this.proxy.forward('POST', `${appConfig.SOCIAL_SERVICE_URL}/follow`, {
+      body,
+      headers: { 'x-user-id': req?.user?.sub || '' },
+    });
+  }
+
+  @Post('follow/unfollow')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Unfollow via FE route' })
+  unfollowAlias(
+    @Body() body: { targetUserId: string },
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    return this.proxy.forward('POST', `${appConfig.SOCIAL_SERVICE_URL}/follow/unfollow`, {
+      body,
+      headers: { 'x-user-id': req?.user?.sub || '' },
+    });
+  }
+
+  @Get('follow/followers')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get followers via FE route' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  getFollowersAlias(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    const query = new URLSearchParams();
+    if (page) query.append('page', page);
+    if (pageSize) query.append('pageSize', pageSize);
+    const queryString = query.toString();
+    return this.proxy.forward('GET', `${appConfig.SOCIAL_SERVICE_URL}/follow/followers${queryString ? `?${queryString}` : ''}`, {
+      headers: { 'x-user-id': req?.user?.sub || '' },
+    });
+  }
+
+  @Get('follow/following')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get following via FE route' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  getFollowingAlias(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    const query = new URLSearchParams();
+    if (page) query.append('page', page);
+    if (pageSize) query.append('pageSize', pageSize);
+    const queryString = query.toString();
+    return this.proxy.forward('GET', `${appConfig.SOCIAL_SERVICE_URL}/follow/following${queryString ? `?${queryString}` : ''}`, {
+      headers: { 'x-user-id': req?.user?.sub || '' },
     });
   }
 

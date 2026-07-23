@@ -117,7 +117,11 @@ export class UsersService {
     ]);
 
     return {
-      data: blocked.map((b) => this.mapProfile(b.blocked)),
+      data: blocked.map((b) => ({
+        ...this.mapProfile(b.blocked),
+        status: 'blocked',
+        relationshipDate: b.createdAt,
+      })),
       meta: {
         pagination: this.buildPagination(page, pageSize, total),
       },
@@ -149,6 +153,32 @@ export class UsersService {
     });
 
     return { message: 'Đã bật lại thông báo' };
+  }
+
+  async getMutedUsers(userId: string, page: number, pageSize: number) {
+    logger.info('Getting muted users', { userId, page, pageSize });
+
+    const [total, muted] = await Promise.all([
+      this.prisma.userMute.count({ where: { muterId: userId } }),
+      this.prisma.userMute.findMany({
+        where: { muterId: userId },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: { muted: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    return {
+      data: muted.map((m) => ({
+        ...this.mapProfile(m.muted),
+        status: 'muted',
+        relationshipDate: m.createdAt,
+      })),
+      meta: {
+        pagination: this.buildPagination(page, pageSize, total),
+      },
+    };
   }
 
   // ── Report ───────────────────────────────────────────────
