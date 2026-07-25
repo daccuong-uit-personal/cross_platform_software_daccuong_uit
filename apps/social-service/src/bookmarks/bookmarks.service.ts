@@ -33,6 +33,7 @@ export class BookmarksService {
     ]);
 
     return {
+      statusCode: 200,
       data: bookmarks.map((b) => ({
         id: b.id,
         targetId: b.targetId,
@@ -48,7 +49,7 @@ export class BookmarksService {
             }
           : null,
       })),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 

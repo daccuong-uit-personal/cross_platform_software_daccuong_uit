@@ -141,8 +141,9 @@ export class PostsService {
     ]);
 
     return {
+      statusCode: 200,
       data: posts.map((p) => this.mapPost(p, userId)),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -170,8 +171,9 @@ export class PostsService {
     ]);
 
     return {
+      statusCode: 200,
       data: posts.map((p) => this.mapPost(p, currentUserId)),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 

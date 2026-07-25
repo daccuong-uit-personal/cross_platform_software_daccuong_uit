@@ -18,7 +18,28 @@ Tài liệu này định nghĩa các API cần thiết cho 9 chức năng (tabs)
 
 *Lưu ý: Tất cả các API GET dạng danh sách đều yêu cầu hỗ trợ Pagination chuẩn như đã định nghĩa ở `FE_INTEGRATION.md`.*
 
-## 2. DTO Mẫu Cho Response Danh Sách Người Dùng
+## 2. Response Format Chuẩn
+
+Tất cả endpoint danh sách được wrap bởi `TransformInterceptor` theo format:
+```json
+{
+  "statusCode": 200,
+  "data": [ ... ],
+  "meta": {
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 5,
+      "totalItems": 95,
+      "itemsPerPage": 20,
+      "hasNext": true
+    }
+  }
+}
+```
+
+**⚠️ IMPORTANT:** `data` **LUÔN LÀ MẢNG (array)**, không phải object!
+
+## 3. DTO Mẫu Cho Response Danh Sách Người Dùng
 
 Để Frontend hiển thị nhất quán trên Component `FriendCard`, response API (data của từng item) cần trả về format bao gồm:
 
@@ -34,7 +55,7 @@ Tài liệu này định nghĩa các API cần thiết cho 9 chức năng (tabs)
 }
 ```
 
-## 3. Các Action Đi Kèm (Mutations)
+## 4. Các Action Đi Kèm (Mutations)
 
 Bên cạnh việc Get list, Frontend cũng cần các thao tác tương tác từ Card:
 
@@ -46,6 +67,6 @@ Bên cạnh việc Get list, Frontend cũng cần các thao tác tương tác t�
 - `/users/block` (POST) - Bỏ chặn/Chặn
 - `/users/mute` (POST) - Bỏ mute/Mute
 
-## 4. Chú ý
+## 5. Chú ý
 - Việc chặn (Block) sẽ tự động hủy kết bạn và hủy follow 2 chiều.
 - Cần sử dụng Redis hoặc Counter cache để lấy đếm số lượng bạn chung (`mutualFriends`) nhanh chóng.

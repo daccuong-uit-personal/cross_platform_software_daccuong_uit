@@ -11,6 +11,7 @@ import {
   Max,
   IsNumber,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export enum NovelStatus {
@@ -162,10 +163,17 @@ export class UpdateReadingProgressDto {
 export class PaginationQueryDto {
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   page?: number = 1;
 
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
   pageSize?: number = 20;
 }
 

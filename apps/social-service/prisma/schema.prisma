@@ -121,6 +121,7 @@ model Friendship {
   initiatorId String           @map("initiator_id")
   receiverId  String           @map("receiver_id")
   status      FriendshipStatus @default(PENDING)
+  type        FriendshipType   @default(NORMAL)
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
 
@@ -135,6 +136,14 @@ enum FriendshipStatus {
   PENDING
   ACCEPTED
   REJECTED
+}
+
+enum FriendshipType {
+  NORMAL
+  CLOSE_FRIEND
+  FAMILY
+  RELATIVE
+  PARTNER
 }
 
 // ============================================================

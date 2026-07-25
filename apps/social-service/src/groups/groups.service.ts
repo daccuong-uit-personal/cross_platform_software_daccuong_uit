@@ -61,8 +61,9 @@ export class GroupsService {
       }),
     ]);
     return {
+      statusCode: 200,
       data: groups.map((g) => this.mapGroup(g, userId)),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -79,8 +80,9 @@ export class GroupsService {
       }),
     ]);
     return {
+      statusCode: 200,
       data: memberships.map((m) => this.mapGroup(m.group, userId)),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -198,12 +200,13 @@ export class GroupsService {
     ]);
 
     return {
+      statusCode: 200,
       data: members.map((m) => ({
         user: { id: m.user.userId, username: m.user.username, displayName: m.user.displayName, avatarUrl: m.user.avatarUrl, isVerified: m.user.isVerified },
         role: m.role.toLowerCase(),
         joinedAt: m.joinedAt,
       })),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -276,10 +279,11 @@ export class GroupsService {
     ]);
 
     return {
+      statusCode: 200,
       data: requests.map((m) => ({
         id: m.user.userId, username: m.user.username, displayName: m.user.displayName, avatarUrl: m.user.avatarUrl,
       })),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -329,6 +333,7 @@ export class GroupsService {
     ]);
 
     return {
+      statusCode: 200,
       data: posts.map((p) => ({
         id: p.id,
         author: { id: p.author.userId, username: p.author.username, displayName: p.author.displayName, avatarUrl: p.author.avatarUrl },
@@ -339,7 +344,7 @@ export class GroupsService {
         commentCount: p.commentCount,
         createdAt: p.createdAt,
       })),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 }

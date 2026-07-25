@@ -125,8 +125,9 @@ export class SearchService {
     }
 
     return {
+      statusCode: 200,
       data: results,
-      meta: isAll ? { note: 'Global search returns max 5 items per category' } : meta,
+      meta: isAll ? { note: 'Global search returns max 5 items per category', timestamp: new Date().toISOString() } : { ...meta, timestamp: new Date().toISOString() },
     };
   }
 }

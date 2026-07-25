@@ -14,6 +14,7 @@ import { AuthErrorCode } from '@platform/auth-sdk';
 import { appConfig } from '../config/app.config';
 import { RegisterDto, LoginDto, SendOtpDto } from './dto/auth.dto';
 import { createLogger } from '@platform/logger';
+import { EventBusService, UserCreatedEvent } from '@platform/common';
 import {
   generateOtp,
   validatePhoneNumber,
@@ -35,6 +36,7 @@ const jwtService = new JwtService({
 @Injectable()
 export class AuthService {
   private redis: Redis;
+  private eventBus: EventBusService;
 
   constructor(private readonly prisma: PrismaService) {
     // Initialize Redis client for OTP storage
@@ -44,6 +46,9 @@ export class AuthService {
       maxRetriesPerRequest: 3,
       retryStrategy: (times) => Math.min(times * 100, 3000),
     });
+
+    // Initialize Event Bus
+    this.eventBus = new EventBusService(redisUrl);
   }
 
   /**
@@ -146,6 +151,28 @@ export class AuthService {
 
       logger.info('Account registered via email', { accountId: account.id, email: dto.email });
 
+      // Publish user.created event
+      try {
+        const event: UserCreatedEvent = {
+          event_id: randomUUID(),
+          event_name: 'user.created.v1',
+          trace_id: randomUUID(),
+          occurred_at: new Date().toISOString(),
+          producer: 'auth-service',
+          payload: {
+            userId: account.id,
+            email: account.email ?? undefined,
+            username: account.username,
+            displayName: account.displayName,
+            preferredContactMethod: account.preferredContactMethod as 'EMAIL' | 'PHONE',
+          },
+        };
+        await this.eventBus.publish(event);
+      } catch (err) {
+        logger.warn('Failed to publish user.created event', { accountId: account.id, error: err });
+        // Don't throw - continue with response even if event publishing fails
+      }
+
       const tokens = jwtService.signTokenPair(
         account.id,
         account.email || account.phoneNumber || account.username,
@@ -207,6 +234,28 @@ export class AuthService {
       });
 
       logger.info('Account registered via phone', { accountId: account.id, phoneNumber: dto.phoneNumber });
+
+      // Publish user.created event
+      try {
+        const event: UserCreatedEvent = {
+          event_id: randomUUID(),
+          event_name: 'user.created.v1',
+          trace_id: randomUUID(),
+          occurred_at: new Date().toISOString(),
+          producer: 'auth-service',
+          payload: {
+            userId: account.id,
+            phoneNumber: account.phoneNumber ?? undefined,
+            username: account.username,
+            displayName: account.displayName,
+            preferredContactMethod: account.preferredContactMethod as 'EMAIL' | 'PHONE',
+          },
+        };
+        await this.eventBus.publish(event);
+      } catch (err) {
+        logger.warn('Failed to publish user.created event', { accountId: account.id, error: err });
+        // Don't throw - continue with response even if event publishing fails
+      }
 
       const tokens = jwtService.signTokenPair(
         account.id,

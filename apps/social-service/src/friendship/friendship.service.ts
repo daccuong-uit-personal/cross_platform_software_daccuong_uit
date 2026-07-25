@@ -24,6 +24,59 @@ export class FriendshipService {
     };
   }
 
+  private async createAutoFollowIfNeeded(
+    tx: any,
+    followerId: string,
+    followingId: string,
+  ) {
+    const existingFollow = await tx.follow.findUnique({
+      where: { followerId_followingId: { followerId, followingId } },
+    });
+
+    if (existingFollow) {
+      return;
+    }
+
+    await tx.follow.create({
+      data: { followerId, followingId, status: 'ACCEPTED' },
+    });
+
+    await tx.userProfile.update({
+      where: { userId: followingId },
+      data: { followerCount: { increment: 1 } },
+    });
+    await tx.userProfile.update({
+      where: { userId: followerId },
+      data: { followingCount: { increment: 1 } },
+    });
+  }
+
+  private async removeAutoFollowIfNeeded(
+    tx: any,
+    followerId: string,
+    followingId: string,
+    friendshipCreatedAt: Date,
+  ) {
+    const follow = await tx.follow.findUnique({
+      where: { followerId_followingId: { followerId, followingId } },
+    });
+
+    if (follow && follow.createdAt >= friendshipCreatedAt) {
+      await tx.follow.delete({
+        where: { followerId_followingId: { followerId, followingId } },
+      });
+
+      await tx.userProfile.update({
+        where: { userId: followingId },
+        data: { followerCount: { decrement: 1 } },
+      });
+      await tx.userProfile.update({
+        where: { userId: followerId },
+        data: { followingCount: { decrement: 1 } },
+      });
+    }
+  }
+
   private mapUser(u: any, overrides: Record<string, any> = {}) {
     const { mutualFriends = 0, relationshipDate = null, status = 'accepted', relationshipType = 'friend', ...rest } = overrides;
     return {
@@ -102,14 +155,16 @@ export class FriendshipService {
         return this.mapUser(friend, {
           status: 'accepted',
           relationshipDate: f.updatedAt,
+          relationshipType: f.type,
           mutualFriends: await this.getMutualFriendCount(userId, friend.userId),
         });
       }),
     );
 
     return {
+      statusCode: 200,
       data: friends,
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -130,15 +185,31 @@ export class FriendshipService {
       [f.initiatorId, f.receiverId].filter((id) => id !== userId),
     );
 
+    const pendingFriendships = await this.prisma.friendship.findMany({
+      where: {
+        OR: [{ initiatorId: userId }, { receiverId: userId }],
+        status: 'PENDING',
+      },
+      select: { initiatorId: true, receiverId: true },
+    });
+
+    const pendingTargetIds = new Set(
+      pendingFriendships
+        .flatMap((f) => [f.initiatorId, f.receiverId])
+        .filter((id) => id !== userId),
+    );
+
+    const excludedUserIds = [...friendIds, ...pendingTargetIds];
+
     const [total, suggestions] = await Promise.all([
       this.prisma.userProfile.count({
         where: {
-          userId: { notIn: [userId, ...friendIds] },
+          userId: { notIn: [userId, ...excludedUserIds] },
         },
       }),
       this.prisma.userProfile.findMany({
         where: {
-          userId: { notIn: [userId, ...friendIds] },
+          userId: { notIn: [userId, ...excludedUserIds] },
         },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -156,8 +227,9 @@ export class FriendshipService {
     );
 
     return {
-      data,
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      statusCode: 200,
+      data: Array.isArray(data) ? data : [],
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -189,8 +261,9 @@ export class FriendshipService {
     );
 
     return {
-      data,
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      statusCode: 200,
+      data: Array.isArray(data) ? data : [],
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -222,8 +295,9 @@ export class FriendshipService {
     );
 
     return {
-      data,
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      statusCode: 200,
+      data: Array.isArray(data) ? data : [],
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -264,22 +338,40 @@ export class FriendshipService {
       throw new ConflictException('Lời mời kết bạn đã được gửi');
     }
 
-    await this.prisma.friendship.create({
-      data: { initiatorId, receiverId, status: 'PENDING' },
+    await this.prisma.$transaction(async (tx) => {
+      const friendship = await tx.friendship.create({
+        data: { initiatorId, receiverId, status: 'PENDING' },
+      });
+
+      await this.createAutoFollowIfNeeded(tx, initiatorId, receiverId);
+
+      await this.removeAutoFollowIfNeeded(tx, receiverId, initiatorId, friendship.createdAt);
     });
 
-    return { message: 'Đã gửi lời mời kết bạn' };
+    return { statusCode: 200, message: 'Đã gửi lời mời kết bạn', timestamp: new Date().toISOString() };
   }
 
   // ── Cancel Sent Request ──────────────────────────────────
   async cancelRequest(initiatorId: string, receiverId: string) {
     logger.info('Cancelling friend request', { initiatorId, receiverId });
 
-    await this.prisma.friendship.deleteMany({
+    const existing = await this.prisma.friendship.findFirst({
       where: { initiatorId, receiverId, status: 'PENDING' },
     });
 
-    return { message: 'Đã hủy lời mời kết bạn' };
+    if (!existing) {
+      return { statusCode: 200, message: 'Đã hủy lời mời kết bạn', timestamp: new Date().toISOString() };
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.friendship.deleteMany({
+        where: { initiatorId, receiverId, status: 'PENDING' },
+      });
+
+      await this.removeAutoFollowIfNeeded(tx, initiatorId, receiverId, existing.createdAt);
+    });
+
+    return { statusCode: 200, message: 'Đã hủy lời mời kết bạn', timestamp: new Date().toISOString() };
   }
 
   // ── Accept Request ───────────────────────────────────────
@@ -299,25 +391,37 @@ export class FriendshipService {
       data: { status: 'ACCEPTED' },
     });
 
-    return { message: 'Đã chấp nhận lời mời kết bạn' };
+    return { statusCode: 200, message: 'Đã chấp nhận lời mời kết bạn', timestamp: new Date().toISOString() };
   }
 
   // ── Reject Request ───────────────────────────────────────
   async rejectRequest(receiverId: string, initiatorId: string) {
     logger.info('Rejecting friend request', { receiverId, initiatorId });
 
-    await this.prisma.friendship.deleteMany({
+    const existing = await this.prisma.friendship.findFirst({
       where: { initiatorId, receiverId, status: 'PENDING' },
     });
 
-    return { message: 'Đã từ chối lời mời kết bạn' };
+    if (!existing) {
+      return { statusCode: 200, message: 'Đã từ chối lời mời kết bạn', timestamp: new Date().toISOString() };
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.friendship.deleteMany({
+        where: { initiatorId, receiverId, status: 'PENDING' },
+      });
+
+      await this.removeAutoFollowIfNeeded(tx, initiatorId, receiverId, existing.createdAt);
+    });
+
+    return { statusCode: 200, message: 'Đã từ chối lời mời kết bạn', timestamp: new Date().toISOString() };
   }
 
   // ── Unfriend ─────────────────────────────────────────────
   async unfriend(userId: string, friendId: string) {
     logger.info('Unfriending', { userId, friendId });
 
-    await this.prisma.friendship.deleteMany({
+    const existing = await this.prisma.friendship.findFirst({
       where: {
         OR: [
           { initiatorId: userId, receiverId: friendId },
@@ -327,7 +431,52 @@ export class FriendshipService {
       },
     });
 
-    return { message: 'Đã hủy kết bạn' };
+    if (!existing) {
+      return { statusCode: 200, message: 'Đã hủy kết bạn', timestamp: new Date().toISOString() };
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.friendship.deleteMany({
+        where: {
+          OR: [
+            { initiatorId: userId, receiverId: friendId },
+            { initiatorId: friendId, receiverId: userId },
+          ],
+          status: 'ACCEPTED',
+        },
+      });
+
+      await this.removeAutoFollowIfNeeded(tx, userId, friendId, existing.createdAt);
+      await this.removeAutoFollowIfNeeded(tx, friendId, userId, existing.createdAt);
+    });
+
+    return { statusCode: 200, message: 'Đã hủy kết bạn', timestamp: new Date().toISOString() };
+  }
+
+  // ── Update Relationship Type ─────────────────────────────
+  async updateRelationshipType(userId: string, friendId: string, type: any) {
+    logger.info('Updating relationship type', { userId, friendId, type });
+
+    const friendship = await this.prisma.friendship.findFirst({
+      where: {
+        OR: [
+          { initiatorId: userId, receiverId: friendId },
+          { initiatorId: friendId, receiverId: userId },
+        ],
+        status: 'ACCEPTED',
+      },
+    });
+
+    if (!friendship) {
+      throw new NotFoundException('Không tìm thấy mối quan hệ bạn bè');
+    }
+
+    await this.prisma.friendship.update({
+      where: { id: friendship.id },
+      data: { type },
+    });
+
+    return { statusCode: 200, message: 'Đã cập nhật mối quan hệ', timestamp: new Date().toISOString() };
   }
 
   async getRelationships(userId: string, page: number, pageSize: number) {
@@ -338,12 +487,14 @@ export class FriendshipService {
         where: {
           OR: [{ initiatorId: userId }, { receiverId: userId }],
           status: 'ACCEPTED',
+          type: { not: 'NORMAL' },
         },
       }),
       this.prisma.friendship.findMany({
         where: {
           OR: [{ initiatorId: userId }, { receiverId: userId }],
           status: 'ACCEPTED',
+          type: { not: 'NORMAL' },
         },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -358,15 +509,16 @@ export class FriendshipService {
         return this.mapUser(friend, {
           status: 'accepted',
           relationshipDate: f.updatedAt,
-          relationshipType: 'friend',
+          relationshipType: f.type,
           mutualFriends: await this.getMutualFriendCount(userId, friend.userId),
         });
       }),
     );
 
     return {
+      statusCode: 200,
       data,
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -408,8 +560,9 @@ export class FriendshipService {
     });
 
     return {
+      statusCode: 200,
       data: mutuals.map((u) => this.mapUser(u)),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 }

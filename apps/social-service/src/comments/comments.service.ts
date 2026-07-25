@@ -54,8 +54,9 @@ export class CommentsService {
     ]);
 
     return {
+      statusCode: 200,
       data: comments.map((c) => this.mapComment(c)),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 

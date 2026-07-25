@@ -16,6 +16,67 @@ const logger = createLogger({ service: 'social-service:users' });
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // ── User Creation (Internal - called from event listener) ─
+  async createUserProfile(data: {
+    userId: string;
+    username: string;
+    displayName: string;
+    email?: string;
+    phoneNumber?: string;
+  }) {
+    logger.info('Creating user profile', { userId: data.userId, username: data.username });
+
+    try {
+      // Check if profile already exists
+      const existing = await this.prisma.userProfile.findUnique({
+        where: { userId: data.userId },
+      });
+
+      if (existing) {
+        logger.warn('User profile already exists', { userId: data.userId });
+        return existing;
+      }
+
+      // Create user profile with default settings
+      const profile = await this.prisma.userProfile.create({
+        data: {
+          userId: data.userId,
+          username: data.username,
+          displayName: data.displayName,
+        },
+      });
+
+      // Create default privacy settings
+      await this.prisma.privacySettings.create({
+        data: {
+          userId: data.userId,
+          isPrivateAccount: false,
+          whoCanSeeMyPosts: 'everyone',
+          whoCanSendFriendRequest: 'everyone',
+          whoCanSeeMyFriendList: 'everyone',
+          whoCanTagMe: 'everyone',
+        },
+      });
+
+      // Create default account settings
+      await this.prisma.accountSettings.create({
+        data: {
+          userId: data.userId,
+          language: 'vi',
+          emailNotifications: true,
+          pushNotifications: true,
+          twoFactorEnabled: false,
+        },
+      });
+
+      logger.info('User profile created successfully', { userId: data.userId });
+      return profile;
+    } catch (error) {
+      logger.error('Failed to create user profile', { userId: data.userId, error });
+      throw error;
+    }
+  }
+
   // ── Helpers ──────────────────────────────────────────────
   private buildPagination(
     page: number,
@@ -72,7 +133,11 @@ export class UsersService {
       orderBy: { followerCount: 'desc' },
     });
 
-    return users.map((u: any) => this.mapProfile(u));
+    return {
+      statusCode: 200,
+      data: users.map((u: any) => this.mapProfile(u)),
+      meta: { timestamp: new Date().toISOString() },
+    };
   }
 
   // ── Block ────────────────────────────────────────────────
@@ -117,6 +182,7 @@ export class UsersService {
     ]);
 
     return {
+      statusCode: 200,
       data: blocked.map((b) => ({
         ...this.mapProfile(b.blocked),
         status: 'blocked',
@@ -124,6 +190,7 @@ export class UsersService {
       })),
       meta: {
         pagination: this.buildPagination(page, pageSize, total),
+        timestamp: new Date().toISOString(),
       },
     };
   }
@@ -170,6 +237,7 @@ export class UsersService {
     ]);
 
     return {
+      statusCode: 200,
       data: muted.map((m) => ({
         ...this.mapProfile(m.muted),
         status: 'muted',
@@ -177,6 +245,7 @@ export class UsersService {
       })),
       meta: {
         pagination: this.buildPagination(page, pageSize, total),
+        timestamp: new Date().toISOString(),
       },
     };
   }

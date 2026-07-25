@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 // Core
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
+import { EventModule } from './events/event.module';
 
 // Phase 2 — Social Core
 import { UsersModule } from './users/users.module';
@@ -29,6 +30,7 @@ import { ProfileModule } from './profile/profile.module';
     // Core infrastructure
     PrismaModule,
     HealthModule,
+    EventModule,
 
     // Social Phase 2 modules
     UsersModule,

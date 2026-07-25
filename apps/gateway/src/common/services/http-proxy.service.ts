@@ -27,14 +27,16 @@ export class HttpProxyService {
     logger.info(`Forwarding ${method} → ${url}`);
 
     const fetchHeaders: Record<string, string> = { ...headers };
-    if (!isFormData) {
+    const requestBody = isFormData ? body : (body != null ? JSON.stringify(body) : undefined);
+
+    if (!isFormData && body != null) {
       fetchHeaders['Content-Type'] = 'application/json';
     }
 
     const response = await fetch(url, {
       method,
       headers: fetchHeaders,
-      body: isFormData ? body : (body ? JSON.stringify(body) : undefined),
+      body: requestBody,
     });
 
     const json = await response.json();
@@ -56,13 +58,22 @@ export class HttpProxyService {
     // Unwrap the internal service envelope: { statusCode, data, message?, meta }
     // Returns a flat object { ...data, message? } that our TransformInterceptor
     // will re-wrap into the standard gateway response for the FE.
-    const wrapped = json as ApiSuccessResponse<Record<string, unknown>>;
+    const wrapped = json as ApiSuccessResponse<unknown>;
     if (wrapped && typeof wrapped === 'object' && 'data' in wrapped) {
       const { data, message } = wrapped;
-      return {
-        ...(data ?? {}),
-        ...(message ? { message } : {}),
-      } as T;
+
+      if (Array.isArray(data)) {
+        return data as T;
+      }
+
+      if (data && typeof data === 'object') {
+        return {
+          ...(data as Record<string, unknown>),
+          ...(message ? { message } : {}),
+        } as T;
+      }
+
+      return data as T;
     }
 
     // Fallback: not a wrapped response (e.g. health check), return as-is

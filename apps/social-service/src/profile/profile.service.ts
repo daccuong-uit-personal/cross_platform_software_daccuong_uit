@@ -142,16 +142,18 @@ export class ProfileService {
         ]);
 
         return {
+          statusCode: 200,
           data: posts,
-          meta: { pagination: this.buildPagination(page, pageSize, total) },
+          meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
         };
       }
 
       case 'stories': {
         // Stories not yet implemented – return empty
         return {
+          statusCode: 200,
           data: [],
-          meta: { pagination: this.buildPagination(page, pageSize, 0) },
+          meta: { pagination: this.buildPagination(page, pageSize, 0), timestamp: new Date().toISOString() },
         };
       }
 
@@ -179,8 +181,9 @@ export class ProfileService {
         ]);
 
         return {
+          statusCode: 200,
           data: reels,
-          meta: { pagination: this.buildPagination(page, pageSize, total) },
+          meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
         };
       }
 
@@ -208,8 +211,9 @@ export class ProfileService {
         ]);
 
         return {
+          statusCode: 200,
           data: videos,
-          meta: { pagination: this.buildPagination(page, pageSize, total) },
+          meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
         };
       }
 
@@ -236,8 +240,9 @@ export class ProfileService {
         ]);
 
         return {
+          statusCode: 200,
           data: novels,
-          meta: { pagination: this.buildPagination(page, pageSize, total) },
+          meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
         };
       }
 
@@ -304,8 +309,9 @@ export class ProfileService {
         });
 
         return {
+          statusCode: 200,
           data,
-          meta: { pagination: this.buildPagination(page, pageSize, total) },
+          meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
         };
       }
 
@@ -338,8 +344,9 @@ export class ProfileService {
         ]);
 
         return {
+          statusCode: 200,
           data: memberships.map((m) => m.group),
-          meta: { pagination: this.buildPagination(page, pageSize, total) },
+          meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
         };
       }
 

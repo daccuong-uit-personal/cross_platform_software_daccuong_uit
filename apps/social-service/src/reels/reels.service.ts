@@ -127,8 +127,9 @@ export class ReelsService {
     ]);
 
     return {
+      statusCode: 200,
       data: reels.map((r) => this.mapReel(r, userId)),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -158,8 +159,9 @@ export class ReelsService {
     ]);
 
     return {
+      statusCode: 200,
       data: reels.map((r) => this.mapReel(r, currentUserId)),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -184,8 +186,9 @@ export class ReelsService {
     ]);
 
     return {
+      statusCode: 200,
       data: reels.map((r) => this.mapReel(r, currentUserId)),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 

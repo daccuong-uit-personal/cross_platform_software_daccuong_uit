@@ -154,8 +154,9 @@ export class FollowService {
     ]);
 
     return {
+      statusCode: 200,
       data: follows.map((f) => this.mapUser(f.follower)),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -177,8 +178,9 @@ export class FollowService {
     ]);
 
     return {
+      statusCode: 200,
       data: follows.map((f) => this.mapUser(f.following)),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -200,8 +202,9 @@ export class FollowService {
     ]);
 
     return {
+      statusCode: 200,
       data: requests.map((r) => this.mapUser(r.follower)),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 

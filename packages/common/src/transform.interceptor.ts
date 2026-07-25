@@ -29,13 +29,40 @@ export class TransformInterceptor<T> implements NestInterceptor<T, SuccessRespon
 
     return next.handle().pipe(
       map((resData) => {
-        // If already fully wrapped (e.g., from proxy forward)
+        // If already fully wrapped (e.g., from proxy forward or service with {statusCode, data, meta})
         if (
           resData &&
           typeof resData === 'object' &&
           'statusCode' in resData &&
-          'data' in resData
+          'data' in resData &&
+          'meta' in resData
         ) {
+          // Ensure data.data is not an object serialized from array
+          // If data is a plain object with numeric keys, it's likely a serialized array
+          if (Array.isArray(resData.data)) {
+            return resData as SuccessResponse<T>;
+          }
+          
+          // Check if this looks like a serialized array (object with numeric string keys)
+          if (
+            resData.data &&
+            typeof resData.data === 'object' &&
+            !Array.isArray(resData.data) &&
+            Object.keys(resData.data).every((key) => /^\d+$/.test(key))
+          ) {
+            // Convert back to array
+            return {
+              statusCode: resData.statusCode,
+              data: Object.values(resData.data) as T,
+              meta: {
+                ...resData.meta,
+                timestamp: resData.meta?.timestamp || new Date().toISOString(),
+                path: resData.meta?.path || '',
+              },
+              ...(resData.message ? { message: resData.message } : {}),
+            };
+          }
+          
           return resData as SuccessResponse<T>;
         }
 
@@ -47,12 +74,12 @@ export class TransformInterceptor<T> implements NestInterceptor<T, SuccessRespon
           'meta' in resData
         ) {
           return {
-            statusCode: response?.statusCode ?? HttpStatus.OK,
+            statusCode: 200,
             data: resData.data,
             meta: {
               ...resData.meta,
               timestamp: new Date().toISOString(),
-              path: request?.url ?? '',
+              path: '',
             },
             ...(resData.message ? { message: resData.message } : {}),
           };
@@ -67,23 +94,23 @@ export class TransformInterceptor<T> implements NestInterceptor<T, SuccessRespon
         ) {
           const { message, ...rest } = resData as Record<string, unknown>;
           return {
-            statusCode: response?.statusCode ?? HttpStatus.OK,
+            statusCode: 200,
             message: message as string,
             data: rest as T,
             meta: {
               timestamp: new Date().toISOString(),
-              path: request?.url ?? '',
+              path: '',
             },
           };
         }
 
         // Default wrap
         return {
-          statusCode: response?.statusCode ?? HttpStatus.OK,
+          statusCode: 200,
           data: resData,
           meta: {
             timestamp: new Date().toISOString(),
-            path: request?.url ?? '',
+            path: '',
           },
         };
       }),

@@ -30,12 +30,13 @@ export class HashtagsService {
     ]);
 
     return {
+      statusCode: 200,
       data: hashtags.map(h => ({
         name: h.name,
         totalMentions: h.postCount + h.reelCount + h.videoCount,
         trendingScore: h.score,
       })),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -78,6 +79,7 @@ export class HashtagsService {
       ]);
 
       return {
+        statusCode: 200,
         data: posts.map((p: any) => ({
           id: p.id,
           type: 'post',
@@ -85,11 +87,11 @@ export class HashtagsService {
           author: { id: p.authorId, username: p.author.username },
           createdAt: p.createdAt,
         })),
-        meta: { pagination: this.buildPagination(page, pageSize, total) },
+        meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
       };
     }
 
-    return { data: [], meta: { pagination: this.buildPagination(page, pageSize, 0) } };
+    return { statusCode: 200, data: [], meta: { pagination: this.buildPagination(page, pageSize, 0), timestamp: new Date().toISOString() } };
   }
 
   async incrementHashtagCount(tags: string[], type: 'post' | 'reel' | 'video') {

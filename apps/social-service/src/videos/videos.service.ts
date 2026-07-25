@@ -193,8 +193,9 @@ export class VideosService {
     ]);
 
     return {
+      statusCode: 200,
       data: playlists,
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -331,6 +332,7 @@ export class VideosService {
     ]);
 
     return {
+      statusCode: 200,
       data: histories
         .filter(h => !h.video.isDeleted)
         .map(h => ({
@@ -339,7 +341,7 @@ export class VideosService {
           lastWatchedAt: h.lastWatchedAt,
           video: this.mapVideo(h.video, userId),
         })),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 

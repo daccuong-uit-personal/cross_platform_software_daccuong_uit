@@ -73,6 +73,50 @@ Tuân chuẩn HTTP Status Code. Body trả về từ `ExceptionFilter`:
 
 ## 3. Các Endpoint Chính Thường Dùng
 
+### 3.1 Friendship Module (Kết bạn)
+Xem chi tiết đầy đủ tại [FRIENDS_MODULE_REQUIREMENTS.md](./FRIENDS_MODULE_REQUIREMENTS.md).
+
+**Danh sách (GET):**
+- `GET /api/v1/friendship/suggestions?page=1&pageSize=20` - Gợi ý kết bạn
+- `GET /api/v1/friendship/friends?page=1&pageSize=20` - Danh sách bạn bè
+- `GET /api/v1/friendship/requests/received?page=1&pageSize=20` - Lời mời nhận được
+- `GET /api/v1/friendship/requests/sent?page=1&pageSize=20` - Lời mời đã gửi
+
+**Mutation (POST):**
+- `POST /api/v1/friendship/requests` - Gửi lời mời kết bạn (body: `{ "targetUserId": "uuid" }`)
+- `POST /api/v1/friendship/requests/{userId}/accept` - Chấp nhận lời mời
+- `POST /api/v1/friendship/requests/{userId}/decline` - Từ chối lời mời
+
+**Response Format:**
+```json
+{
+  "statusCode": 200,
+  "data": [
+    {
+      "id": "user-uuid",
+      "name": "Tên Người Dùng",
+      "avatar": "https://...",
+      "mutualFriends": 5,
+      "relationshipDate": "2026-07-20T10:00:00.000Z",
+      "status": "suggested|accepted|pending",
+      "relationshipType": "friend"
+    }
+  ],
+  "meta": {
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 5,
+      "totalItems": 95,
+      "itemsPerPage": 20,
+      "hasNext": true
+    }
+  }
+}
+```
+
+**⚠️ Important:** `data` luôn là **mảng (array)**, không phải object!
+
+### 3.2 Feed / Discover
 - **Feed / Discover**:
   - `GET /posts/feed` (Bảng tin bài viết của bạn bè/người theo dõi)
   - `GET /reels/discover?filter=for-you` (Cuộn video ngắn)
@@ -85,6 +129,7 @@ Tuân chuẩn HTTP Status Code. Body trả về từ `ExceptionFilter`:
   - `GET /videos/me/history` (Continue watching videos)
   - `GET /novels/me/library` (Tủ sách đang đọc dở)
   - `PUT /novels/:novelId/chapters/:chapterId/progress` (Ghi nhận % cuộn chuột của chapter)
+
 
 ## 4. Lưu Ý Tích Hợp
 - **Counter Cache:** Số lượng Like, Comment, View (`likeCount`, `viewCount`) đi kèm cùng chi tiết bài viết. Khi FE thực hiện Like, BE sẽ trả về `likeCount` mới nhất, FE tự cập nhật UI state mà không cần fetch lại toàn bộ.

@@ -46,8 +46,9 @@ export class NotificationsService {
     ]);
 
     return {
+      statusCode: 200,
       data: notifications.map((n) => this.mapNotification(n)),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 

@@ -95,8 +95,9 @@ export class NovelsService {
     ]);
 
     return {
+      statusCode: 200,
       data: novels.map(n => this.mapNovel(n, currentUserId)),
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
@@ -190,8 +191,9 @@ export class NovelsService {
     ]);
 
     return {
+      statusCode: 200,
       data: chapters,
-      meta: { pagination: this.buildPagination(page, pageSize, total) },
+      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
 
