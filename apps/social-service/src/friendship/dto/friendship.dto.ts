@@ -31,6 +31,26 @@ export class UpdateRelationshipTypeDto {
 }
 
 // ── Response DTOs ─────────────────────────────────────────
+export class MenuItemConfigDto {
+  @ApiProperty({ example: 'unfriend' })
+  id!: string;
+
+  @ApiProperty({ example: 'Hủy kết bạn' })
+  label!: string;
+
+  @ApiPropertyOptional()
+  icon?: string;
+
+  @ApiPropertyOptional()
+  isDanger?: boolean;
+
+  @ApiPropertyOptional()
+  hasSubmenu?: boolean;
+
+  @ApiPropertyOptional({ type: () => [MenuItemConfigDto] })
+  submenuItems?: MenuItemConfigDto[];
+}
+
 export class UserSuggestionDto {
   @ApiProperty({ example: 'dc225607-6ac6-40be-b51d-f2d7661f9dfd' })
   id!: string;
@@ -52,6 +72,9 @@ export class UserSuggestionDto {
 
   @ApiProperty({ example: 'friend' })
   relationshipType!: string;
+
+  @ApiPropertyOptional({ type: [MenuItemConfigDto] })
+  menuItems?: MenuItemConfigDto[];
 }
 
 export class PaginationMeta {

@@ -96,4 +96,18 @@ export class FollowProxyController {
       headers: { 'x-user-id': req?.user?.sub || '' },
     });
   }
+
+  @Delete('followers/:userId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Xóa người theo dõi via FE route' })
+  removeFollower(
+    @Param('userId') userId: string,
+    @Request() req?: AuthenticatedRequest,
+  ) {
+    return this.proxy.forward('DELETE', `${appConfig.SOCIAL_SERVICE_URL}/follow/followers/${userId}`, {
+      headers: { 'x-user-id': req?.user?.sub || '' },
+    });
+  }
 }

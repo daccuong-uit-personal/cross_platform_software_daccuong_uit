@@ -142,4 +142,16 @@ export class FollowController {
   ) {
     return this.followService.rejectFollowRequest(currentUserId, userId);
   }
+
+  // ── Remove Follower ───────────────────────────────────────
+  @Delete('follow/followers/:userId')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Xóa người theo dõi (ngăn họ follow mình)' })
+  removeFollower(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @CurrentUser() currentUserId: string,
+  ) {
+    return this.followService.removeFollower(currentUserId, userId);
+  }
 }

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { createLogger } from '@platform/logger';
+import { getMenuItemsForContext } from '../common/utils/menu-config';
 
 const logger = createLogger({ service: 'social-service:friendship' });
 
@@ -126,6 +127,25 @@ export class FriendshipService {
     return mutualFriends;
   }
 
+  /** Batch-fetch which of the given targetIds are muted/blocked by userId. */
+  private async getMuteBlockSets(userId: string, targetIds: string[]) {
+    if (targetIds.length === 0) return { muteSet: new Set<string>(), blockSet: new Set<string>() };
+    const [mutes, blocks] = await Promise.all([
+      this.prisma.userMute.findMany({
+        where: { muterId: userId, mutedId: { in: targetIds } },
+        select: { mutedId: true },
+      }),
+      this.prisma.userBlock.findMany({
+        where: { blockerId: userId, blockedId: { in: targetIds } },
+        select: { blockedId: true },
+      }),
+    ]);
+    return {
+      muteSet: new Set(mutes.map(m => m.mutedId)),
+      blockSet: new Set(blocks.map(b => b.blockedId)),
+    };
+  }
+
   // ── Friend List ──────────────────────────────────────────
   async getFriends(userId: string, page: number, pageSize: number) {
     logger.info('Getting friends list', { userId, page, pageSize });
@@ -149,14 +169,30 @@ export class FriendshipService {
       }),
     ]);
 
+    const friendIds = friendships.map(f => f.initiatorId === userId ? f.receiverId : f.initiatorId);
+    const [follows, { muteSet, blockSet }] = await Promise.all([
+      this.prisma.follow.findMany({
+        where: { followerId: userId, followingId: { in: friendIds }, status: 'ACCEPTED' },
+        select: { followingId: true },
+      }),
+      this.getMuteBlockSets(userId, friendIds),
+    ]);
+    const followingSet = new Set(follows.map(f => f.followingId));
+
     const friends = await Promise.all(
       friendships.map(async (f) => {
         const friend = f.initiatorId === userId ? f.receiver : f.initiator;
         return this.mapUser(friend, {
-          status: 'accepted',
+          status: 'friend',
           relationshipDate: f.updatedAt,
           relationshipType: f.type,
           mutualFriends: await this.getMutualFriendCount(userId, friend.userId),
+          menuItems: getMenuItemsForContext('all', {
+            isFriend: true,
+            isFollowing: followingSet.has(friend.userId),
+            isMuted: muteSet.has(friend.userId),
+            isBlocked: blockSet.has(friend.userId),
+          }),
         });
       }),
     );
@@ -503,14 +539,30 @@ export class FriendshipService {
       }),
     ]);
 
+    const friendIds = friendships.map(f => f.initiatorId === userId ? f.receiverId : f.initiatorId);
+    const [follows, { muteSet, blockSet }] = await Promise.all([
+      this.prisma.follow.findMany({
+        where: { followerId: userId, followingId: { in: friendIds }, status: 'ACCEPTED' },
+        select: { followingId: true },
+      }),
+      this.getMuteBlockSets(userId, friendIds),
+    ]);
+    const followingSet = new Set(follows.map(f => f.followingId));
+
     const data = await Promise.all(
       friendships.map(async (f) => {
         const friend = f.initiatorId === userId ? f.receiver : f.initiator;
         return this.mapUser(friend, {
-          status: 'accepted',
+          status: 'friend',
           relationshipDate: f.updatedAt,
           relationshipType: f.type,
           mutualFriends: await this.getMutualFriendCount(userId, friend.userId),
+          menuItems: getMenuItemsForContext('close-friends', {
+            isFriend: true,
+            isFollowing: followingSet.has(friend.userId),
+            isMuted: muteSet.has(friend.userId),
+            isBlocked: blockSet.has(friend.userId),
+          }),
         });
       }),
     );

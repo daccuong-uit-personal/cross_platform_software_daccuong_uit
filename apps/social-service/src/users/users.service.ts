@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { createLogger } from '@platform/logger';
+import { getMenuItemsForContext } from '../common/utils/menu-config';
 import {
   UpdatePrivacySettingsDto,
   UpdateAccountSettingsDto,
@@ -187,6 +188,7 @@ export class UsersService {
         ...this.mapProfile(b.blocked),
         status: 'blocked',
         relationshipDate: b.createdAt,
+        menuItems: getMenuItemsForContext('blocked'),
       })),
       meta: {
         pagination: this.buildPagination(page, pageSize, total),
@@ -236,12 +238,32 @@ export class UsersService {
       }),
     ]);
 
+    const mutedIds = muted.map(m => m.mutedId);
+    const [friendships, blocks] = await Promise.all([
+      this.prisma.friendship.findMany({
+        where: {
+          OR: [
+            { initiatorId: userId, receiverId: { in: mutedIds } },
+            { receiverId: userId, initiatorId: { in: mutedIds } }
+          ],
+          status: 'ACCEPTED'
+        }
+      }),
+      this.prisma.userBlock.findMany({
+        where: { blockerId: userId, blockedId: { in: mutedIds } },
+        select: { blockedId: true },
+      }),
+    ]);
+    const friendSet = new Set(friendships.map(f => f.initiatorId === userId ? f.receiverId : f.initiatorId));
+    const blockSet = new Set(blocks.map(b => b.blockedId));
+
     return {
       statusCode: 200,
       data: muted.map((m) => ({
         ...this.mapProfile(m.muted),
         status: 'muted',
         relationshipDate: m.createdAt,
+        menuItems: getMenuItemsForContext('muted', { isFriend: friendSet.has(m.mutedId), isBlocked: blockSet.has(m.mutedId) }),
       })),
       meta: {
         pagination: this.buildPagination(page, pageSize, total),
