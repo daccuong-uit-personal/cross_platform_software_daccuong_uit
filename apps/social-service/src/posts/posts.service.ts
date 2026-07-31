@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { createLogger } from '@platform/logger';
+import { PostVisibility } from '@prisma/client-social';
 import {
   CreatePostDto,
   UpdatePostDto,
@@ -41,6 +42,56 @@ export class PostsService {
       isVerified: u.isVerified,
       isPrivate: u.isPrivate,
     };
+  }
+
+  private isVisibleToUser(post: any, currentUserId?: string, viewerId?: string) {
+    if (!post || post.isDeleted) return false;
+
+    const authorId = post.authorId ?? post.author?.userId;
+    const visibility = (post.visibility ?? '').toString().toUpperCase();
+
+    if (authorId && currentUserId && authorId === currentUserId) {
+      return true;
+    }
+
+    if (visibility === PostVisibility.PUBLIC.toUpperCase()) {
+      return true;
+    }
+
+    if (visibility === PostVisibility.FRIENDS.toUpperCase()) {
+      if (!viewerId || !authorId) return false;
+
+      return this.isFriend(authorId, viewerId);
+    }
+
+    return false;
+  }
+
+  private async isFriend(authorId: string, viewerId: string) {
+    if (authorId === viewerId) return true;
+
+    const friendship = await this.prisma.friendship.findFirst({
+      where: {
+        OR: [
+          { initiatorId: authorId, receiverId: viewerId },
+          { initiatorId: viewerId, receiverId: authorId },
+        ],
+        status: 'ACCEPTED',
+      },
+    });
+
+    return !!friendship;
+  }
+
+  private async filterVisiblePosts(posts: any[], currentUserId?: string, viewerId?: string) {
+    const results = await Promise.all(
+      posts.map(async (post) => {
+        const visible = await this.isVisibleToUser(post, currentUserId, viewerId);
+        return visible ? post : null;
+      }),
+    );
+
+    return results.filter(Boolean);
   }
 
   private mapPost(post: any, currentUserId?: string) {
@@ -110,29 +161,46 @@ export class PostsService {
   async getPersonalFeed(userId: string, page: number, pageSize: number) {
     logger.info('Getting personal feed', { userId, page, pageSize });
 
-    // Get IDs of people the user follows
-    const follows = await this.prisma.follow.findMany({
-      where: { followerId: userId, status: 'ACCEPTED' },
-      select: { followingId: true },
-    });
-    const followingIds = follows.map((f) => f.followingId);
+    const [acceptedFollows, acceptedFriendships] = await Promise.all([
+      this.prisma.follow.findMany({
+        where: { followerId: userId, status: 'ACCEPTED' },
+        select: { followingId: true },
+      }),
+      this.prisma.friendship.findMany({
+        where: {
+          OR: [{ initiatorId: userId }, { receiverId: userId }],
+          status: 'ACCEPTED',
+        },
+        select: { initiatorId: true, receiverId: true },
+      }),
+    ]);
 
-    const authorIds = [userId, ...followingIds];
+    const followingIds = acceptedFollows.map((f) => f.followingId);
+    const friendIds = acceptedFriendships
+      .map((f) => (f.initiatorId === userId ? f.receiverId : f.initiatorId))
+      .filter(Boolean);
+
+    const authorIds = [userId, ...followingIds, ...friendIds];
+
+    const visiblePostsWhere = {
+      isDeleted: false,
+      OR: [
+        { authorId: userId },
+        { visibility: PostVisibility.PUBLIC },
+        {
+          AND: [
+            { visibility: PostVisibility.FRIENDS },
+            { authorId: { in: friendIds } },
+          ],
+        },
+      ],
+      authorId: { in: authorIds },
+    };
 
     const [total, posts] = await Promise.all([
-      this.prisma.post.count({
-        where: {
-          authorId: { in: authorIds },
-          isDeleted: false,
-          visibility: { not: 'PRIVATE' },
-        },
-      }),
+      this.prisma.post.count({ where: visiblePostsWhere }),
       this.prisma.post.findMany({
-        where: {
-          authorId: { in: authorIds },
-          isDeleted: false,
-          visibility: { not: 'PRIVATE' },
-        },
+        where: visiblePostsWhere,
         skip: (page - 1) * pageSize,
         take: pageSize,
         orderBy: { createdAt: 'desc' },
@@ -140,9 +208,11 @@ export class PostsService {
       }),
     ]);
 
+    const visiblePosts = await this.filterVisiblePosts(posts, userId, userId);
+
     return {
       statusCode: 200,
-      data: posts.map((p) => this.mapPost(p, userId)),
+      data: visiblePosts.map((p) => this.mapPost(p, userId)),
       meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
@@ -159,10 +229,10 @@ export class PostsService {
 
     const [total, posts] = await Promise.all([
       this.prisma.post.count({
-        where: { isDeleted: false, visibility: 'PUBLIC' },
+        where: { isDeleted: false, visibility: PostVisibility.PUBLIC },
       }),
       this.prisma.post.findMany({
-        where: { isDeleted: false, visibility: 'PUBLIC' },
+        where: { isDeleted: false, visibility: PostVisibility.PUBLIC },
         skip: (page - 1) * pageSize,
         take: pageSize,
         orderBy: Array.isArray(orderBy) ? orderBy : [orderBy],
@@ -182,7 +252,7 @@ export class PostsService {
     const { page = 1, pageSize = 20, authorId, hashtag, type, groupId } = query;
     logger.info('Listing posts', { query });
 
-    const where: any = { isDeleted: false, visibility: 'PUBLIC' };
+    const where: any = { isDeleted: false, visibility: PostVisibility.PUBLIC };
     if (authorId) where.authorId = authorId;
     if (hashtag) where.hashtags = { has: hashtag };
     if (type) where.type = type.toUpperCase();
@@ -269,6 +339,11 @@ export class PostsService {
 
     if (!post || post.isDeleted) {
       throw new NotFoundException('Bài đăng không tồn tại');
+    }
+
+    const isVisible = await this.isVisibleToUser(post, currentUserId, currentUserId);
+    if (!isVisible) {
+      throw new ForbiddenException('Bạn không có quyền xem bài đăng này');
     }
 
     return this.mapPost(post, currentUserId);
