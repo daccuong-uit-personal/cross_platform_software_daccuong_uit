@@ -43,6 +43,26 @@ export class UpdateProfileDto {
   @IsString()
   location?: string;
 
+  @ApiPropertyOptional({ example: 'Hà Nội, Việt Nam' })
+  @IsOptional()
+  @IsString()
+  hometown?: string;
+
+  @ApiPropertyOptional({ example: '1995-01-01T00:00:00.000Z' })
+  @IsOptional()
+  @IsString()
+  birthday?: string;
+
+  @ApiPropertyOptional({ example: 'Độc thân' })
+  @IsOptional()
+  @IsString()
+  relationshipStatus?: string;
+
+  @ApiPropertyOptional({ example: 'Nam' })
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
   @ApiPropertyOptional({ example: false })
   @IsOptional()
   @IsBoolean()

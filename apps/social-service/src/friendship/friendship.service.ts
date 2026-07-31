@@ -170,14 +170,26 @@ export class FriendshipService {
     ]);
 
     const friendIds = friendships.map(f => f.initiatorId === userId ? f.receiverId : f.initiatorId);
-    const [follows, { muteSet, blockSet }] = await Promise.all([
+    const [follows, { muteSet, blockSet }, followerCounts, postCounts] = await Promise.all([
       this.prisma.follow.findMany({
         where: { followerId: userId, followingId: { in: friendIds }, status: 'ACCEPTED' },
         select: { followingId: true },
       }),
       this.getMuteBlockSets(userId, friendIds),
+      this.prisma.follow.groupBy({
+        by: ['followingId'],
+        where: { followingId: { in: friendIds }, status: 'ACCEPTED' },
+        _count: { followingId: true },
+      }),
+      this.prisma.post.groupBy({
+        by: ['authorId'],
+        where: { authorId: { in: friendIds }, type: { notIn: ['REPOST', 'QUOTE_REPOST'] } },
+        _count: { authorId: true },
+      }),
     ]);
     const followingSet = new Set(follows.map(f => f.followingId));
+    const followerMap = new Map(followerCounts.map(fc => [fc.followingId, fc._count.followingId]));
+    const postMap = new Map(postCounts.map(pc => [pc.authorId, pc._count.authorId]));
 
     const friends = await Promise.all(
       friendships.map(async (f) => {
@@ -186,6 +198,8 @@ export class FriendshipService {
           status: 'friend',
           relationshipDate: f.updatedAt,
           relationshipType: f.type,
+          followerCount: followerMap.get(friend.userId) ?? 0,
+          postCount: postMap.get(friend.userId) ?? 0,
           mutualFriends: await this.getMutualFriendCount(userId, friend.userId),
           menuItems: getMenuItemsForContext('all', {
             isFriend: true,

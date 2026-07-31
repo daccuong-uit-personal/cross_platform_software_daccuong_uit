@@ -35,6 +35,10 @@ export class ProfileService {
       bio: u.bio,
       website: u.website,
       location: u.location,
+      hometown: u.hometown,
+      birthday: u.birthday,
+      relationshipStatus: u.relationshipStatus,
+      gender: u.gender,
       isVerified: u.isVerified,
       isPrivate: u.isPrivate,
       followerCount: u.followerCount,
@@ -54,6 +58,25 @@ export class ProfileService {
     if (!user) {
       throw new NotFoundException('Người dùng không tồn tại');
     }
+
+    const [followerCount, followingCount, postCount] = await Promise.all([
+      this.prisma.follow.count({
+        where: { followingId: userId, status: 'ACCEPTED' },
+      }),
+      this.prisma.follow.count({
+        where: { followerId: userId, status: 'ACCEPTED' },
+      }),
+      this.prisma.post.count({
+        where: {
+          authorId: userId,
+          type: { notIn: [PostType.REPOST, PostType.QUOTE_REPOST] },
+        },
+      }),
+    ]);
+
+    user.followerCount = followerCount;
+    user.followingCount = followingCount;
+    user.postCount = postCount;
 
     const profile: any = this.mapProfile(user);
 
@@ -290,9 +313,23 @@ export class ProfileService {
             displayName: true,
             avatarUrl: true,
             isVerified: true,
-            followerCount: true,
           },
         });
+
+        const followerCounts = await this.prisma.follow.groupBy({
+          by: ['followingId'],
+          where: { followingId: { in: friendIds }, status: 'ACCEPTED' },
+          _count: { followingId: true },
+        });
+
+        const postCounts = await this.prisma.post.groupBy({
+          by: ['authorId'],
+          where: { authorId: { in: friendIds }, type: { notIn: ['REPOST', 'QUOTE_REPOST'] } },
+          _count: { authorId: true },
+        });
+
+        const followerMap = new Map(followerCounts.map(fc => [fc.followingId, fc._count.followingId]));
+        const postMap = new Map(postCounts.map(pc => [pc.authorId, pc._count.authorId]));
 
         const profileMap = new Map(friendProfiles.map((p) => [p.userId, p]));
 
@@ -304,7 +341,8 @@ export class ProfileService {
             displayName: p?.displayName ?? p?.username ?? '',
             avatarUrl: p?.avatarUrl ?? null,
             isVerified: p?.isVerified ?? false,
-            followerCount: p?.followerCount ?? 0,
+            followerCount: followerMap.get(fid) ?? 0,
+            postCount: postMap.get(fid) ?? 0,
           };
         });
 
@@ -375,6 +413,10 @@ export class ProfileService {
         ...(dto.coverUrl !== undefined && { coverUrl: dto.coverUrl }),
         ...(dto.website !== undefined && { website: dto.website }),
         ...(dto.location !== undefined && { location: dto.location }),
+        ...(dto.hometown !== undefined && { hometown: dto.hometown }),
+        ...(dto.birthday !== undefined && { birthday: dto.birthday ? new Date(dto.birthday) : null }),
+        ...(dto.relationshipStatus !== undefined && { relationshipStatus: dto.relationshipStatus }),
+        ...(dto.gender !== undefined && { gender: dto.gender }),
         ...(dto.isPrivate !== undefined && { isPrivate: dto.isPrivate }),
       },
     });
