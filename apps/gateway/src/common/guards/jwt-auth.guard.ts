@@ -37,3 +37,26 @@ export class JwtAuthGuard implements CanActivate {
     }
   }
 }
+
+@Injectable()
+export class OptionalJwtAuthGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest();
+    const authHeader: string | undefined = request.headers['authorization'];
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return true;
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    try {
+      const payload = jwtService.verifyAccessToken(token);
+      request.user = payload;
+    } catch {
+      // Ignore invalid or expired tokens for optional auth
+    }
+
+    return true;
+  }
+}

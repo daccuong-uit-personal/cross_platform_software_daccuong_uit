@@ -25,6 +25,80 @@ export class ProfileService {
     };
   }
 
+  private async canViewPost(post: any, currentUserId?: string, viewerId?: string) {
+    if (!post || post.isDeleted) return false;
+
+    if (post.authorId && currentUserId && post.authorId === currentUserId) {
+      return true;
+    }
+
+    const visibility = (post.visibility ?? '').toString().toUpperCase();
+    if (visibility === 'PUBLIC') {
+      return true;
+    }
+
+    if (!viewerId || !post.authorId) {
+      return false;
+    }
+
+    if (visibility === 'FRIENDS') {
+      const friendship = await this.prisma.friendship.findFirst({
+        where: {
+          OR: [
+            { initiatorId: post.authorId, receiverId: viewerId },
+            { initiatorId: viewerId, receiverId: post.authorId },
+          ],
+          status: 'ACCEPTED',
+        },
+      });
+      return !!friendship;
+    }
+
+    return false;
+  }
+
+  private mapProfileTabPost(post: any, currentUserId?: string) {
+    const likes = Array.isArray(post.likes) ? post.likes : [];
+    const bookmarks = Array.isArray(post.bookmarks) ? post.bookmarks : [];
+    const derivedLikeCount = Array.isArray(likes) ? likes.length : Number(post.likeCount ?? 0);
+    const isLikedByCurrentUser = currentUserId
+      ? likes.some((like: any) => like.userId === currentUserId)
+      : false;
+
+    return {
+      id: post.id,
+      type: post.type?.toLowerCase?.() ?? 'text',
+      content: post.content,
+      mediaUrls: post.mediaUrls ?? [],
+      hashtags: post.hashtags ?? [],
+      visibility: post.visibility?.toLowerCase?.() ?? 'public',
+      likeCount: derivedLikeCount,
+      commentCount: Number(post.commentCount ?? 0),
+      shareCount: Number(post.shareCount ?? 0),
+      viewCount: Number(post.viewCount ?? 0),
+      createdAt: post.createdAt,
+      updatedAt: post.updatedAt,
+      author: post.author
+        ? {
+            id: post.author.userId,
+            userId: post.author.userId,
+            username: post.author.username,
+            displayName: post.author.displayName,
+            avatarUrl: post.author.avatarUrl,
+            bio: post.author.bio,
+            isVerified: post.author.isVerified,
+          }
+        : null,
+      isLikedByCurrentUser,
+      isBookmarkedByCurrentUser: currentUserId
+        ? bookmarks.some((bookmark: any) => bookmark.userId === currentUserId)
+        : false,
+      allowComments: true,
+      isPinned: false,
+      mentions: [],
+    };
+  }
+
   private mapProfile(u: any) {
     return {
       id: u.userId,
@@ -152,21 +226,55 @@ export class ProfileService {
             orderBy: { createdAt: 'desc' },
             select: {
               id: true,
+              authorId: true,
               type: true,
               content: true,
               mediaUrls: true,
+              hashtags: true,
+              visibility: true,
               likeCount: true,
               commentCount: true,
               shareCount: true,
               viewCount: true,
               createdAt: true,
+              updatedAt: true,
+              isDeleted: true,
+              author: {
+                select: {
+                  userId: true,
+                  username: true,
+                  displayName: true,
+                  avatarUrl: true,
+                  bio: true,
+                  isVerified: true,
+                },
+              },
+              likes: {
+                select: { userId: true },
+              },
+              bookmarks: currentUserId
+                ? {
+                    where: { userId: currentUserId },
+                    select: { userId: true },
+                  }
+                : {
+                    select: { userId: true },
+                  },
             },
           }),
         ]);
 
+        const visiblePosts = [] as any[];
+        for (const post of posts) {
+          const canView = await this.canViewPost(post, currentUserId, currentUserId);
+          if (canView) {
+            visiblePosts.push(post);
+          }
+        }
+
         return {
           statusCode: 200,
-          data: posts,
+          data: visiblePosts.map((post) => this.mapProfileTabPost(post, currentUserId)),
           meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
         };
       }

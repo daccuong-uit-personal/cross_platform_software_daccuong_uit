@@ -50,6 +50,7 @@ model UserProfile {
   posts            Post[]
   comments         Comment[]
   reactions        Reaction[]
+  postLikes        PostLike[]
   bookmarks        Bookmark[]
   groupMembers     GroupMember[]
   reels            Reel[]
@@ -260,6 +261,7 @@ model Post {
   reposts      Post[]       @relation("Repost")
   poll         Poll?
   comments     Comment[]
+  likes        PostLike[]
   reactions    Reaction[]
   bookmarks    Bookmark[]
   hiddenBy     PostHidden[]
@@ -418,6 +420,19 @@ model Bookmark {
 
   @@unique([userId, targetId, targetType])
   @@map("bookmarks")
+}
+
+model PostLike {
+  id        String       @id @default(uuid())
+  postId    String       @map("post_id")
+  userId    String       @map("user_id")
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  post Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("post_likes")
 }
 
 enum BookmarkTarget {

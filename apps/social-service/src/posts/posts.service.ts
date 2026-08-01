@@ -5,7 +5,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { createLogger } from '@platform/logger';
+import { EventBusService, DomainEvent } from '@platform/common';
 import { PostVisibility } from '@prisma/client-social';
+import { randomUUID } from 'crypto';
 import {
   CreatePostDto,
   UpdatePostDto,
@@ -14,12 +16,17 @@ import {
   FeedQueryDto,
   DiscoverQueryDto,
 } from './dto/post.dto';
+import { PostLikeCacheService } from './post-like-cache.service';
 
 const logger = createLogger({ service: 'social-service:posts' });
 
 @Injectable()
 export class PostsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventBus: EventBusService,
+    private readonly postLikeCache: PostLikeCacheService,
+  ) {}
 
   // ── Helpers ───────────────────────────────────────────────
   private buildPagination(page: number, pageSize: number, totalItems: number) {
@@ -95,25 +102,16 @@ export class PostsService {
   }
 
   private mapPost(post: any, currentUserId?: string) {
-    const reactions = post.reactions ?? [];
-    const reactionCounts = reactions.reduce(
-      (acc: Record<string, number>, r: any) => {
-        const key = r.type.toLowerCase();
-        acc[key] = (acc[key] ?? 0) + 1;
-        return acc;
-      },
-      {},
-    );
-
+    const likes = post.likes ?? [];
     const isLiked = currentUserId
-      ? reactions.some(
-          (r: any) => r.userId === currentUserId && r.type === 'LIKE',
-        )
+      ? likes.some((like: any) => like.userId === currentUserId)
       : false;
 
     const isBookmarked = currentUserId
       ? (post.bookmarks ?? []).some((b: any) => b.userId === currentUserId)
       : false;
+
+    const likeCount = Array.isArray(likes) ? likes.length : Number(post.likeCount ?? 0);
 
     return {
       id: post.id,
@@ -136,11 +134,10 @@ export class PostsService {
           }
         : null,
       groupId: post.groupId,
-      likeCount: post.likeCount,
+      likeCount,
       commentCount: post.commentCount,
       shareCount: post.shareCount,
       repostCount: post.repostCount,
-      reactions: reactionCounts,
       isLikedByCurrentUser: isLiked,
       isBookmarkedByCurrentUser: isBookmarked,
       isRepostedByCurrentUser: false, // extend later
@@ -150,10 +147,38 @@ export class PostsService {
     };
   }
 
+  private async syncLikeCount(postId: string, tx?: any): Promise<number> {
+    const likeCount = await (tx ?? this.prisma).postLike.count({ where: { postId } });
+    await (tx ?? this.prisma).post.update({
+      where: { id: postId },
+      data: { likeCount },
+    });
+    await this.postLikeCache.set(postId, likeCount);
+    return likeCount;
+  }
+
+  private async hydrateLikeCounts(posts: any[]): Promise<void> {
+    await Promise.all(
+      posts.map(async (post) => {
+        const cachedCount = await this.postLikeCache.get(post.id);
+        const derivedCount = Array.isArray(post.likes)
+          ? post.likes.length
+          : Number(post.likeCount ?? 0);
+
+        if (cachedCount !== null) {
+          post.likeCount = cachedCount;
+        } else {
+          await this.postLikeCache.set(post.id, derivedCount);
+          post.likeCount = derivedCount;
+        }
+      }),
+    );
+  }
+
   private readonly postInclude = {
     author: true,
     poll: { include: { options: true } },
-    reactions: { select: { userId: true, type: true } },
+    likes: { select: { userId: true } },
     bookmarks: { select: { userId: true } },
   };
 
@@ -209,6 +234,7 @@ export class PostsService {
     ]);
 
     const visiblePosts = await this.filterVisiblePosts(posts, userId, userId);
+    await this.hydrateLikeCounts(visiblePosts);
 
     return {
       statusCode: 200,
@@ -240,6 +266,8 @@ export class PostsService {
       }),
     ]);
 
+    await this.hydrateLikeCounts(posts);
+
     return {
       statusCode: 200,
       data: posts.map((p) => this.mapPost(p, currentUserId)),
@@ -268,6 +296,8 @@ export class PostsService {
         include: this.postInclude,
       }),
     ]);
+
+    await this.hydrateLikeCounts(posts);
 
     return {
       data: posts.map((p) => this.mapPost(p, currentUserId)),
@@ -346,6 +376,7 @@ export class PostsService {
       throw new ForbiddenException('Bạn không có quyền xem bài đăng này');
     }
 
+    await this.hydrateLikeCounts([post]);
     return this.mapPost(post, currentUserId);
   }
 
@@ -412,27 +443,37 @@ export class PostsService {
       throw new NotFoundException('Bài đăng không tồn tại');
     }
 
-    const existing = await this.prisma.reaction.findUnique({
+    const existingLike = await this.prisma.postLike.findUnique({
       where: {
-        userId_targetId_targetType: { userId, targetId: postId, targetType: 'POST' },
+        userId_postId: { userId, postId },
       },
     });
 
-    if (!existing) {
+    if (!existingLike) {
       await this.prisma.$transaction(async (tx) => {
-        await tx.reaction.create({
-          data: { userId, targetId: postId, targetType: 'POST', type: 'LIKE' },
+        await tx.postLike.create({
+          data: { userId, postId },
         });
-        await tx.post.update({
-          where: { id: postId },
-          data: { likeCount: { increment: 1 } },
-        });
+        await this.syncLikeCount(postId, tx);
       });
+
+      try {
+        const event: DomainEvent = {
+          event_id: randomUUID(),
+          event_name: 'post.like.created.v1',
+          occurred_at: new Date().toISOString(),
+          producer: 'social-service',
+          payload: { postId, userId },
+        };
+        await this.eventBus.publish(event);
+      } catch (error) {
+        logger.error('Failed to publish post.like.created.v1 event', error);
+      }
     }
 
     const updated = await this.prisma.post.findUnique({ where: { id: postId } });
     return {
-      likeCount: updated!.likeCount,
+      likeCount: updated?.likeCount ?? 0,
       isLikedByCurrentUser: true,
     };
   }
@@ -440,29 +481,39 @@ export class PostsService {
   async unlikePost(postId: string, userId: string) {
     logger.info('Unliking post', { postId, userId });
 
-    const existing = await this.prisma.reaction.findUnique({
+    const existingLike = await this.prisma.postLike.findUnique({
       where: {
-        userId_targetId_targetType: { userId, targetId: postId, targetType: 'POST' },
+        userId_postId: { userId, postId },
       },
     });
 
-    if (existing) {
+    if (existingLike) {
       await this.prisma.$transaction(async (tx) => {
-        await tx.reaction.delete({
+        await tx.postLike.delete({
           where: {
-            userId_targetId_targetType: { userId, targetId: postId, targetType: 'POST' },
+            userId_postId: { userId, postId },
           },
         });
-        await tx.post.update({
-          where: { id: postId },
-          data: { likeCount: { decrement: 1 } },
-        });
+        await this.syncLikeCount(postId, tx);
       });
+
+      try {
+        const event: DomainEvent = {
+          event_id: randomUUID(),
+          event_name: 'post.like.deleted.v1',
+          occurred_at: new Date().toISOString(),
+          producer: 'social-service',
+          payload: { postId, userId },
+        };
+        await this.eventBus.publish(event);
+      } catch (error) {
+        logger.error('Failed to publish post.like.deleted.v1 event', error);
+      }
     }
 
     const updated = await this.prisma.post.findUnique({ where: { id: postId } });
     return {
-      likeCount: updated!.likeCount,
+      likeCount: updated?.likeCount ?? 0,
       isLikedByCurrentUser: false,
     };
   }

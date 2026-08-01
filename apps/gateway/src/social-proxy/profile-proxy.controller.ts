@@ -11,7 +11,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { HttpProxyService } from '../common/services/http-proxy.service';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { JwtAuthGuard, OptionalJwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { appConfig } from '../config/app.config';
 import { AccessTokenPayload } from '@platform/auth-sdk';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -26,6 +26,7 @@ export class ProfileProxyController {
   constructor(private readonly proxy: HttpProxyService) {}
 
   @Get(':userId')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get profile header and stats by userId (Auth Account ID)' })
   getProfile(@Param('userId') userId: string, @Request() req: any) {
     const headers: Record<string, string> = {};
@@ -36,6 +37,7 @@ export class ProfileProxyController {
   }
 
   @Get(':userId/profile-summary')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get profile summary for the profile page' })
   getProfileSummary(@Param('userId') userId: string, @Request() req: any) {
     const headers: Record<string, string> = {};
@@ -58,18 +60,26 @@ export class ProfileProxyController {
   }
 
   @Get(':userId/profile-tabs/:tabId')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get content for a profile tab' })
   getProfileTab(
+    @Request() req: any,
     @Param('userId') userId: string,
     @Param('tabId') tabId: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
   ) {
+    const headers: Record<string, string> = {};
+    if (req.user?.sub) {
+      headers['x-user-id'] = req.user.sub;
+    }
     const query = new URLSearchParams();
     if (page) query.append('page', page);
     if (pageSize) query.append('pageSize', pageSize);
     const queryString = query.toString();
-    return this.proxy.forward('GET', `${appConfig.SOCIAL_SERVICE_URL}/profiles/${userId}/profile-tabs/${tabId}${queryString ? `?${queryString}` : ''}`);
+    return this.proxy.forward('GET', `${appConfig.SOCIAL_SERVICE_URL}/profiles/${userId}/profile-tabs/${tabId}${queryString ? `?${queryString}` : ''}`, {
+      headers,
+    });
   }
 
   @Put(':userId')

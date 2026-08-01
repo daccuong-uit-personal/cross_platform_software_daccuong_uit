@@ -13,7 +13,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { HttpProxyService } from '../common/services/http-proxy.service';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { JwtAuthGuard, OptionalJwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { appConfig } from '../config/app.config';
 import { AccessTokenPayload } from '@platform/auth-sdk';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
@@ -29,6 +29,7 @@ export class SocialProxyController {
 
   // ── User Profile (Public - Optional Auth) ────────────────
   @Get(':userId')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get user profile' })
   @ApiResponse({ status: 200, description: 'User profile data' })
   @ApiResponse({ status: 404, description: 'User not found' })
@@ -46,6 +47,7 @@ export class SocialProxyController {
   }
 
   @Get(':userId/profile-summary')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get user profile summary' })
   @ApiResponse({ status: 200, description: 'User profile summary' })
   @ApiResponse({ status: 404, description: 'User not found' })

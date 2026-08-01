@@ -11,7 +11,6 @@ import { FollowModule } from './follow/follow.module';
 import { FriendshipModule } from './friendship/friendship.module';
 import { PostsModule } from './posts/posts.module';
 import { CommentsModule } from './comments/comments.module';
-import { ReactionsModule } from './reactions/reactions.module';
 import { GroupsModule } from './groups/groups.module';
 import { BookmarksModule } from './bookmarks/bookmarks.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -38,7 +37,6 @@ import { ProfileModule } from './profile/profile.module';
     FriendshipModule,
     PostsModule,
     CommentsModule,
-    ReactionsModule,
     GroupsModule,
     BookmarksModule,
     NotificationsModule,

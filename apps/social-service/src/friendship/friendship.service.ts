@@ -83,6 +83,7 @@ export class FriendshipService {
     return {
       id: u.userId ?? u.id,
       name: u.displayName ?? u.username ?? u.name ?? 'Unknown',
+      username: u.username ?? undefined,
       avatar: u.avatarUrl ?? u.avatar ?? null,
       mutualFriends,
       relationshipDate,
@@ -170,7 +171,7 @@ export class FriendshipService {
     ]);
 
     const friendIds = friendships.map(f => f.initiatorId === userId ? f.receiverId : f.initiatorId);
-    const [follows, { muteSet, blockSet }, followerCounts, postCounts] = await Promise.all([
+    const [follows, { muteSet, blockSet }, followerCounts, postCounts, privatePostCounts] = await Promise.all([
       this.prisma.follow.findMany({
         where: { followerId: userId, followingId: { in: friendIds }, status: 'ACCEPTED' },
         select: { followingId: true },
@@ -186,20 +187,27 @@ export class FriendshipService {
         where: { authorId: { in: friendIds }, type: { notIn: ['REPOST', 'QUOTE_REPOST'] } },
         _count: { authorId: true },
       }),
+      this.prisma.post.groupBy({
+        by: ['authorId'],
+        where: { authorId: { in: friendIds }, visibility: 'PRIVATE', type: { notIn: ['REPOST', 'QUOTE_REPOST'] } },
+        _count: { authorId: true },
+      }),
     ]);
     const followingSet = new Set(follows.map(f => f.followingId));
     const followerMap = new Map(followerCounts.map(fc => [fc.followingId, fc._count.followingId]));
     const postMap = new Map(postCounts.map(pc => [pc.authorId, pc._count.authorId]));
+    const privatePostMap = new Map(privatePostCounts.map(pc => [pc.authorId, pc._count.authorId]));
 
     const friends = await Promise.all(
       friendships.map(async (f) => {
         const friend = f.initiatorId === userId ? f.receiver : f.initiator;
-        return this.mapUser(friend, {
+          return this.mapUser(friend, {
           status: 'friend',
           relationshipDate: f.updatedAt,
           relationshipType: f.type,
           followerCount: followerMap.get(friend.userId) ?? 0,
           postCount: postMap.get(friend.userId) ?? 0,
+          privatePostCount: privatePostMap.get(friend.userId) ?? 0,
           mutualFriends: await this.getMutualFriendCount(userId, friend.userId),
           menuItems: getMenuItemsForContext('all', {
             isFriend: true,
