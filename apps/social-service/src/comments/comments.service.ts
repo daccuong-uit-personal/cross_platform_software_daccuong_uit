@@ -88,7 +88,9 @@ export class CommentsService {
   }
 
   private mapComment(c: any, currentUserId?: string, reactionMap?: Map<string, boolean>) {
-    const isLikedByCurrentUser = reactionMap?.get(c.id) ?? Boolean(c.isLikedByCurrentUser ?? c.isLiked ?? false);
+    const isLikedByCurrentUser = currentUserId
+    ? Boolean(c.commentLikes?.length)
+    : false;
 
     return {
       id: c.id,
@@ -132,16 +134,14 @@ export class CommentsService {
       }),
     ]);
 
-    const reactionMap = new Map<string, boolean>();
-    comments.forEach((comment) => {
-      reactionMap.set(comment.id, Boolean(comment.commentLikes?.length));
-    });
-
     return {
       statusCode: 200,
-      data: comments.map((c) => this.mapComment(c, currentUserId, reactionMap)),
-      meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
-    };
+      data: comments.map((c) => this.mapComment(c, currentUserId)),
+      meta: {
+        pagination: this.buildPagination(page, pageSize, total),
+        timestamp: new Date().toISOString(),
+      },
+};
   }
 
   // ── Create comment ────────────────────────────────────────
@@ -293,11 +293,9 @@ export class CommentsService {
 
     const updatedComment = await this.prisma.comment.findUnique({ where: { id: commentId }, select: { likeCount: true } });
     return {
-      data: {
         commentId,
         likeCount: updatedComment?.likeCount ?? comment.likeCount,
         isLikedByCurrentUser: true,
-      },
     };
   }
 
@@ -322,11 +320,9 @@ export class CommentsService {
 
     const updatedComment = await this.prisma.comment.findUnique({ where: { id: commentId }, select: { likeCount: true } });
     return {
-      data: {
         commentId,
         likeCount: updatedComment?.likeCount ?? comment.likeCount,
         isLikedByCurrentUser: false,
-      },
     };
   }
 

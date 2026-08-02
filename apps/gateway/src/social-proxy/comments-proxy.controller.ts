@@ -23,6 +23,7 @@ export class CommentsProxyController {
   constructor(private readonly proxy: HttpProxyService) {}
 
   @Get('posts/:postId/comments')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Lấy danh sách comment của một post' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'pageSize', required: false, type: Number })

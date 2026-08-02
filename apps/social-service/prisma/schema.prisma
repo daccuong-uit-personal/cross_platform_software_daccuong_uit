@@ -337,39 +337,41 @@ model PostHidden {
 // ============================================================
 // COMMENTS
 // ============================================================
-model Comment {
-  id         String   @id @default(uuid())
-  postId     String   @map("post_id")
-  authorId   String   @map("author_id")
-  parentId   String?  @map("parent_id")
-  content       String
-  mentionRanges Json?    @map("mention_ranges")
-  isPinned      Boolean  @default(false) @map("is_pinned")
-  likeCount     Int      @default(0) @map("like_count")
-  replyCount    Int      @default(0) @map("reply_count")
-  isDeleted  Boolean  @default(false) @map("is_deleted")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  post      Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
-  author    UserProfile @relation(fields: [authorId], references: [userId], onDelete: Cascade)
-  parent    Comment?    @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
-  replies   Comment[]   @relation("CommentReplies")
-  commentLikes CommentLike[]
+model Comment {
+  id             String   @id @default(uuid())
+  postId         String   @map("post_id")
+  authorId       String   @map("author_id")
+  parentId       String?  @map("parent_id")
+  content        String
+  mentionRanges  Json?    @map("mention_ranges")
+  isPinned       Boolean  @default(false) @map("is_pinned")
+  likeCount      Int      @default(0) @map("like_count")
+  replyCount     Int      @default(0) @map("reply_count")
+  isDeleted      Boolean  @default(false) @map("is_deleted")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  post           Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author         UserProfile @relation(fields: [authorId], references: [userId], onDelete: Cascade)
+  parent         Comment?    @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies        Comment[]   @relation("CommentReplies")
+
+  commentLikes   CommentLike[]
 
   @@map("comments")
 }
 
 model CommentLike {
-  id        String   @id @default(uuid())
-  commentId String   @map("comment_id")
-  userId    String   @map("user_id")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  comment Comment     @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  user    UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  commentId  String   @map("comment_id")
+  userId     String   @map("user_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  comment    Comment     @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user       UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@unique([userId, commentId])
+  @@index([commentId])
+
   @@map("comment_likes")
 }
 
