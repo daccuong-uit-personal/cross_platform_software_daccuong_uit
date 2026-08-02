@@ -4,6 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { createLogger } from '@platform/logger';
 import { CreateCommentDto, UpdateCommentDto } from './dto/comment.dto';
 
@@ -11,14 +12,84 @@ const logger = createLogger({ service: 'social-service:comments' });
 
 @Injectable()
 export class CommentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   private buildPagination(page: number, pageSize: number, totalItems: number) {
     const totalPages = Math.ceil(totalItems / pageSize);
     return { currentPage: page, totalPages, totalItems, itemsPerPage: pageSize, hasNext: page < totalPages };
   }
 
-  private mapComment(c: any) {
+  private extractMentionUsernames(content: string): string[] {
+    const mentions = content.match(/@([a-zA-Z0-9._-]+)/g) ?? [];
+    return Array.from(new Set(mentions.map((mention) => mention.slice(1).toLowerCase())));
+  }
+
+  private async notifyMentions(authorId: string, content: string, targetId: string, mentionedUserIds: string[] = []) {
+    const normalizedUserIds = Array.from(new Set((mentionedUserIds ?? []).filter(Boolean)));
+    const usernames = this.extractMentionUsernames(content);
+
+    let mentionedUsers: Array<{ userId: string; username?: string }> = normalizedUserIds.map((userId) => ({ userId }));
+
+    if (!mentionedUsers.length && usernames.length) {
+      mentionedUsers = await this.prisma.userProfile.findMany({
+        where: { username: { in: usernames } },
+        select: { userId: true, username: true },
+      });
+    }
+
+    const notifications = mentionedUsers
+      .filter((user) => user.userId !== authorId)
+      .map((user) => ({
+        userId: user.userId,
+        actorId: authorId,
+        type: 'POST_MENTION',
+        targetId,
+        targetType: 'COMMENT',
+        content: `Bạn được nhắc đến trong một bình luận`,
+      }));
+
+    await Promise.all(notifications.map((notification) => this.notificationsService.push(notification)));
+  }
+
+  private async resolveTopLevelParentId(postId: string, parentId?: string | null) {
+    if (!parentId) {
+      return null;
+    }
+
+    let currentParentId = parentId;
+    const visited = new Set<string>();
+
+    while (currentParentId) {
+      if (visited.has(currentParentId)) {
+        break;
+      }
+      visited.add(currentParentId);
+
+      const currentComment = await this.prisma.comment.findUnique({
+        where: { id: currentParentId },
+        select: { id: true, parentId: true, postId: true },
+      });
+
+      if (!currentComment || currentComment.postId !== postId) {
+        throw new NotFoundException('Comment cha không tồn tại');
+      }
+
+      if (!currentComment.parentId) {
+        return currentComment.id;
+      }
+
+      currentParentId = currentComment.parentId;
+    }
+
+    return currentParentId ?? null;
+  }
+
+  private mapComment(c: any, currentUserId?: string, reactionMap?: Map<string, boolean>) {
+    const isLikedByCurrentUser = reactionMap?.get(c.id) ?? Boolean(c.isLikedByCurrentUser ?? c.isLiked ?? false);
+
     return {
       id: c.id,
       postId: c.postId,
@@ -27,8 +98,11 @@ export class CommentsService {
         ? { id: c.author.userId, username: c.author.username, displayName: c.author.displayName, avatarUrl: c.author.avatarUrl, isVerified: c.author.isVerified }
         : null,
       content: c.content,
+      mentionedUsers: Array.isArray(c.mentionedUsers) ? c.mentionedUsers : [],
+      mentionRanges: Array.isArray(c.mentionRanges) ? c.mentionRanges : [],
       isPinned: c.isPinned,
       likeCount: c.likeCount,
+      isLikedByCurrentUser,
       replyCount: c.replyCount,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
@@ -36,7 +110,7 @@ export class CommentsService {
   }
 
   // ── List comments of a post ───────────────────────────────
-  async listByPost(postId: string, page: number, pageSize: number) {
+  async listByPost(postId: string, page: number, pageSize: number, currentUserId?: string) {
     logger.info('Listing comments', { postId, page });
 
     const post = await this.prisma.post.findUnique({ where: { id: postId } });
@@ -49,13 +123,23 @@ export class CommentsService {
         skip: (page - 1) * pageSize,
         take: pageSize,
         orderBy: [{ isPinned: 'desc' }, { createdAt: 'asc' }],
-        include: { author: true },
+        include: {
+          author: true,
+          commentLikes: currentUserId
+            ? { where: { userId: currentUserId }, select: { id: true } }
+            : false,
+        },
       }),
     ]);
 
+    const reactionMap = new Map<string, boolean>();
+    comments.forEach((comment) => {
+      reactionMap.set(comment.id, Boolean(comment.commentLikes?.length));
+    });
+
     return {
       statusCode: 200,
-      data: comments.map((c) => this.mapComment(c)),
+      data: comments.map((c) => this.mapComment(c, currentUserId, reactionMap)),
       meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
@@ -67,25 +151,29 @@ export class CommentsService {
     const post = await this.prisma.post.findUnique({ where: { id: postId } });
     if (!post || post.isDeleted) throw new NotFoundException('Bài đăng không tồn tại');
 
-    // Validate parentId belongs to same post
-    if (dto.parentId) {
-      const parent = await this.prisma.comment.findUnique({ where: { id: dto.parentId } });
-      if (!parent || parent.postId !== postId) throw new NotFoundException('Comment cha không tồn tại');
-    }
+    const resolvedParentId = await this.resolveTopLevelParentId(postId, dto.parentId);
 
     const comment = await this.prisma.$transaction(async (tx) => {
       const c = await tx.comment.create({
-        data: { postId, authorId, content: dto.content, parentId: dto.parentId ?? null },
+        data: {
+          postId,
+          authorId,
+          content: dto.content,
+          parentId: resolvedParentId,
+          mentionRanges: (dto.mentionRanges ?? []) as any,
+        } as any,
         include: { author: true },
       });
       await tx.post.update({ where: { id: postId }, data: { commentCount: { increment: 1 } } });
-      if (dto.parentId) {
-        await tx.comment.update({ where: { id: dto.parentId }, data: { replyCount: { increment: 1 } } });
+      if (resolvedParentId) {
+        await tx.comment.update({ where: { id: resolvedParentId }, data: { replyCount: { increment: 1 } } });
       }
       return c;
     });
 
-    return this.mapComment(comment);
+    await this.notifyMentions(authorId, dto.content, comment.id, dto.mentionedUserIds ?? dto.mentionRanges?.map((range) => range.userId) ?? []);
+
+    return this.mapComment(comment, authorId, new Map());
   }
 
   // ── Update comment ────────────────────────────────────────
@@ -102,7 +190,9 @@ export class CommentsService {
       include: { author: true },
     });
 
-    return this.mapComment(updated);
+    await this.notifyMentions(authorId, dto.content, updated.id, []);
+
+    return this.mapComment(updated, authorId, new Map());
   }
 
   // ── Delete comment ────────────────────────────────────────
@@ -125,7 +215,7 @@ export class CommentsService {
   }
 
   // ── Replies ───────────────────────────────────────────────
-  async getReplies(commentId: string, page: number, pageSize: number) {
+  async getReplies(commentId: string, page: number, pageSize: number, currentUserId?: string) {
     logger.info('Getting replies', { commentId, page });
 
     const parent = await this.prisma.comment.findUnique({ where: { id: commentId } });
@@ -138,12 +228,22 @@ export class CommentsService {
         skip: (page - 1) * pageSize,
         take: pageSize,
         orderBy: { createdAt: 'asc' },
-        include: { author: true },
+        include: {
+          author: true,
+          commentLikes: currentUserId
+            ? { where: { userId: currentUserId }, select: { id: true } }
+            : false,
+        },
       }),
     ]);
 
+    const reactionMap = new Map<string, boolean>();
+    replies.forEach((comment) => {
+      reactionMap.set(comment.id, Boolean(comment.commentLikes?.length));
+    });
+
     return {
-      data: replies.map((c) => this.mapComment(c)),
+      data: replies.map((c) => this.mapComment(c, currentUserId, reactionMap)),
       meta: { pagination: this.buildPagination(page, pageSize, total) },
     };
   }
@@ -167,6 +267,67 @@ export class CommentsService {
 
     await this.prisma.comment.update({ where: { id: commentId }, data: { isPinned: true } });
     return { message: 'Đã ghim comment' };
+  }
+
+  async likeComment(commentId: string, userId: string) {
+    logger.info('Liking comment', { commentId, userId });
+
+    const comment = await this.prisma.comment.findUnique({ where: { id: commentId } });
+    if (!comment || comment.isDeleted) throw new NotFoundException('Comment không tồn tại');
+
+    const existingLike = await this.prisma.commentLike.findUnique({
+      where: { userId_commentId: { userId, commentId } },
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      if (existingLike) {
+        return;
+      }
+
+      await tx.commentLike.create({
+        data: { userId, commentId },
+      });
+
+      await tx.comment.update({ where: { id: commentId }, data: { likeCount: { increment: 1 } } });
+    });
+
+    const updatedComment = await this.prisma.comment.findUnique({ where: { id: commentId }, select: { likeCount: true } });
+    return {
+      data: {
+        commentId,
+        likeCount: updatedComment?.likeCount ?? comment.likeCount,
+        isLikedByCurrentUser: true,
+      },
+    };
+  }
+
+  async unlikeComment(commentId: string, userId: string) {
+    logger.info('Unliking comment', { commentId, userId });
+
+    const comment = await this.prisma.comment.findUnique({ where: { id: commentId } });
+    if (!comment || comment.isDeleted) throw new NotFoundException('Comment không tồn tại');
+
+    const existingLike = await this.prisma.commentLike.findUnique({
+      where: { userId_commentId: { userId, commentId } },
+    });
+
+    if (existingLike) {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.commentLike.delete({
+          where: { userId_commentId: { userId, commentId } },
+        });
+        await tx.comment.update({ where: { id: commentId }, data: { likeCount: { decrement: 1 } } });
+      });
+    }
+
+    const updatedComment = await this.prisma.comment.findUnique({ where: { id: commentId }, select: { likeCount: true } });
+    return {
+      data: {
+        commentId,
+        likeCount: updatedComment?.likeCount ?? comment.likeCount,
+        isLikedByCurrentUser: false,
+      },
+    };
   }
 
   async unpin(commentId: string, userId: string) {

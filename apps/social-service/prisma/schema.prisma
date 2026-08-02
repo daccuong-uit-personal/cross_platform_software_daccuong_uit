@@ -49,6 +49,7 @@ model UserProfile {
   mutedBy          UserMute[]        @relation("Muted")
   posts            Post[]
   comments         Comment[]
+  commentLikes     CommentLike[]
   reactions        Reaction[]
   postLikes        PostLike[]
   bookmarks        Bookmark[]
@@ -262,7 +263,6 @@ model Post {
   poll         Poll?
   comments     Comment[]
   likes        PostLike[]
-  reactions    Reaction[]
   bookmarks    Bookmark[]
   hiddenBy     PostHidden[]
 
@@ -342,10 +342,11 @@ model Comment {
   postId     String   @map("post_id")
   authorId   String   @map("author_id")
   parentId   String?  @map("parent_id")
-  content    String
-  isPinned   Boolean  @default(false) @map("is_pinned")
-  likeCount  Int      @default(0) @map("like_count")
-  replyCount Int      @default(0) @map("reply_count")
+  content       String
+  mentionRanges Json?    @map("mention_ranges")
+  isPinned      Boolean  @default(false) @map("is_pinned")
+  likeCount     Int      @default(0) @map("like_count")
+  replyCount    Int      @default(0) @map("reply_count")
   isDeleted  Boolean  @default(false) @map("is_deleted")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -354,9 +355,22 @@ model Comment {
   author    UserProfile @relation(fields: [authorId], references: [userId], onDelete: Cascade)
   parent    Comment?    @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
   replies   Comment[]   @relation("CommentReplies")
-  reactions Reaction[]
+  commentLikes CommentLike[]
 
   @@map("comments")
+}
+
+model CommentLike {
+  id        String   @id @default(uuid())
+  commentId String   @map("comment_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  comment Comment     @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@map("comment_likes")
 }
 
 // ============================================================
@@ -370,13 +384,7 @@ model Reaction {
   type       ReactionType
   createdAt  DateTime       @default(now()) @map("created_at")
 
-  user    UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
-  post    Post?       @relation(fields: [targetId], references: [id], onDelete: Cascade, map: "reaction_post_fk")
-  comment Comment?    @relation(fields: [targetId], references: [id], onDelete: Cascade, map: "reaction_comment_fk")
-  reel    Reel?       @relation(fields: [targetId], references: [id], onDelete: Cascade, map: "reaction_reel_fk")
-  video   Video?      @relation(fields: [targetId], references: [id], onDelete: Cascade, map: "reaction_video_fk")
-  novel   Novel?      @relation(fields: [targetId], references: [id], onDelete: Cascade, map: "reaction_novel_fk")
-  chapter Chapter?    @relation(fields: [targetId], references: [id], onDelete: Cascade, map: "reaction_chapter_fk")
+  user UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@unique([userId, targetId, targetType])
   @@map("reactions")
@@ -384,9 +392,6 @@ model Reaction {
 
 enum ReactionType {
   LIKE
-  LOVE
-  HAHA
-  WOW
   SAD
   ANGRY
   CARE
@@ -501,7 +506,6 @@ model Reel {
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
   author    UserProfile @relation(fields: [authorId], references: [userId], onDelete: Cascade)
-  reactions Reaction[]
   bookmarks Bookmark[]
 
   // Composite indexes for fast feed retrieval
@@ -540,7 +544,6 @@ model Video {
   updatedAt      DateTime        @updatedAt @map("updated_at")
 
   author        UserProfile     @relation(fields: [authorId], references: [userId], onDelete: Cascade)
-  reactions     Reaction[]
   bookmarks     Bookmark[]
   playlistItems PlaylistVideo[]
   history       WatchHistory[]
@@ -630,7 +633,6 @@ model Novel {
   chapters  Chapter[]
   follows   NovelFollow[]
   ratings   NovelRating[]
-  reactions Reaction[]
   bookmarks Bookmark[]
 
   @@index([visibility, createdAt(sort: Desc)])
@@ -664,7 +666,6 @@ model Chapter {
 
   novel           Novel             @relation(fields: [novelId], references: [id], onDelete: Cascade)
   readingProgress ReadingProgress[]
-  reactions       Reaction[]
   bookmarks       Bookmark[]
 
   @@unique([novelId, orderIndex])

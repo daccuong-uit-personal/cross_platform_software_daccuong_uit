@@ -39,12 +39,13 @@ export class HttpProxyService {
       body: requestBody,
     });
 
-    const json = await response.json();
+    const text = await response.text();
+    const json = text ? JSON.parse(text) : null;
 
     if (!response.ok) {
       // Forward the full upstream error payload so AllExceptionsFilter
       // can extract validation `errors` and re-surface them to FE.
-      const err = json as ApiErrorResponse;
+      const err = (json ?? {}) as ApiErrorResponse;
       throw new HttpException(
         {
           message: err.message ?? 'Upstream service error',
@@ -53,6 +54,10 @@ export class HttpProxyService {
         },
         err.statusCode ?? HttpStatus.BAD_GATEWAY,
       );
+    }
+
+    if (response.status === 204 || response.status === 205) {
+      return null as T;
     }
 
     // Unwrap the internal service envelope: { statusCode, data, message?, meta }

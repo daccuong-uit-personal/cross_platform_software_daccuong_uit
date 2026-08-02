@@ -1,6 +1,22 @@
-import { IsString, IsOptional, IsUUID, MinLength, MaxLength, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsUUID, MinLength, MaxLength, IsInt, Min, Max, IsArray, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+class MentionRangeDto {
+  @ApiProperty({ description: 'ID user được tag' })
+  @IsUUID()
+  userId!: string;
+
+  @ApiProperty({ description: 'Vị trí bắt đầu của mention trong content' })
+  @IsInt()
+  @Min(0)
+  start!: number;
+
+  @ApiProperty({ description: 'Vị trí kết thúc của mention trong content' })
+  @IsInt()
+  @Min(0)
+  end!: number;
+}
 
 export class CreateCommentDto {
   @ApiProperty({ example: 'Bài viết hay quá! 🔥' })
@@ -13,6 +29,19 @@ export class CreateCommentDto {
   @IsOptional()
   @IsUUID()
   parentId?: string;
+
+  @ApiPropertyOptional({ description: 'Danh sách userId được tag trong comment', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  mentionedUserIds?: string[];
+
+  @ApiPropertyOptional({ description: 'Danh sách vùng mention trong content', type: [MentionRangeDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MentionRangeDto)
+  mentionRanges?: MentionRangeDto[];
 }
 
 export class UpdateCommentDto {

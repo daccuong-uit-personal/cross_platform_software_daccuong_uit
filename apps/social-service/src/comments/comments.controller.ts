@@ -17,8 +17,9 @@ export class CommentsController {
   listByPost(
     @Param('postId', ParseUUIDPipe) postId: string,
     @Query() query: PaginationQueryDto,
+    @CurrentUser() userId: string,
   ) {
-    return this.commentsService.listByPost(postId, query.page ?? 1, query.pageSize ?? 20);
+    return this.commentsService.listByPost(postId, query.page ?? 1, query.pageSize ?? 20, userId || undefined);
   }
 
   @Post('posts/:postId/comments')
@@ -59,8 +60,31 @@ export class CommentsController {
   getReplies(
     @Param('commentId', ParseUUIDPipe) commentId: string,
     @Query() query: PaginationQueryDto,
+    @CurrentUser() userId: string,
   ) {
-    return this.commentsService.getReplies(commentId, query.page ?? 1, query.pageSize ?? 20);
+    return this.commentsService.getReplies(commentId, query.page ?? 1, query.pageSize ?? 20, userId || undefined);
+  }
+
+  @Post('comments/:commentId/like')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Thích comment' })
+  likeComment(
+    @Param('commentId', ParseUUIDPipe) commentId: string,
+    @CurrentUser() userId: string,
+  ) {
+    return this.commentsService.likeComment(commentId, userId);
+  }
+
+  @Delete('comments/:commentId/like')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Bỏ thích comment' })
+  unlikeComment(
+    @Param('commentId', ParseUUIDPipe) commentId: string,
+    @CurrentUser() userId: string,
+  ) {
+    return this.commentsService.unlikeComment(commentId, userId);
   }
 
   @Post('comments/:commentId/pin')

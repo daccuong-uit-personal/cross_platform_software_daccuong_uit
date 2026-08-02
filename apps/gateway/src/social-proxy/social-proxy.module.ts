@@ -4,15 +4,17 @@ import { ProfileProxyController } from './profile-proxy.controller';
 import { FriendshipProxyController } from './friendship-proxy.controller';
 import { FollowProxyController } from './follow-proxy.controller';
 import { PostsProxyController } from './posts-proxy.controller';
+import { CommentsProxyController } from './comments-proxy.controller';
 import { HttpProxyService } from '../common/services/http-proxy.service';
 
 @Module({
   controllers: [
-    SocialProxyController, 
+    SocialProxyController,
     ProfileProxyController,
     FriendshipProxyController,
     FollowProxyController,
     PostsProxyController,
+    CommentsProxyController,
   ],
   providers: [HttpProxyService],
 })
