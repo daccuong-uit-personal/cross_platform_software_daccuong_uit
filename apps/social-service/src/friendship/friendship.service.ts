@@ -12,7 +12,7 @@ const logger = createLogger({ service: 'social-service:friendship' });
 
 @Injectable()
 export class FriendshipService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   private buildPagination(page: number, pageSize: number, totalItems: number) {
     const totalPages = Math.ceil(totalItems / pageSize);
@@ -89,6 +89,13 @@ export class FriendshipService {
       relationshipDate,
       status,
       relationshipType,
+      bio: u.bio ?? null,
+      website: u.website ?? null,
+      location: u.location ?? null,
+      hometown: u.hometown ?? null,
+      birthday: u.birthday ?? null,
+      gender: u.gender ?? null,
+      relationshipStatus: u.relationshipStatus ?? null,
       ...rest,
     };
   }
@@ -201,7 +208,7 @@ export class FriendshipService {
     const friends = await Promise.all(
       friendships.map(async (f) => {
         const friend = f.initiatorId === userId ? f.receiver : f.initiator;
-          return this.mapUser(friend, {
+        return this.mapUser(friend, {
           status: 'friend',
           relationshipDate: f.updatedAt,
           relationshipType: f.type,
