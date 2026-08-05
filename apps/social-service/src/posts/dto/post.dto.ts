@@ -81,6 +81,12 @@ export class CreatePostDto {
   @IsString({ each: true })
   mediaUrls?: string[];
 
+  @ApiPropertyOptional({ type: [String], example: [] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  hashtags?: string[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => CreatePollDto)

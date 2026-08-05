@@ -316,7 +316,7 @@ export class PostsService {
           type: (dto.type ?? 'text').toUpperCase() as any,
           content: dto.content,
           mediaUrls: dto.mediaUrls ?? [],
-          hashtags: this.extractHashtags(dto.content),
+          hashtags: [...new Set([...this.extractHashtags(dto.content), ...(dto.hashtags || [])])],
           visibility: (dto.visibility ?? 'public').toUpperCase() as any,
           groupId: dto.groupId ?? null,
           linkUrl: dto.linkUrl ?? null,
