@@ -23,6 +23,8 @@ export enum PostType {
   POLL = 'poll',
   GIF = 'gif',
   LINK = 'link',
+  REPOST = 'repost',
+  QUOTE_REPOST = 'quote_repost',
 }
 
 export enum PostVisibility {
@@ -106,6 +108,11 @@ export class CreatePostDto {
   @IsOptional()
   @IsUUID()
   groupId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  originalPostId?: string;
 }
 
 // ---- Update Post ----

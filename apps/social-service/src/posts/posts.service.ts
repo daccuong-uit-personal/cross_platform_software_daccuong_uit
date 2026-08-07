@@ -113,7 +113,7 @@ export class PostsService {
 
     const likeCount = Array.isArray(likes) ? likes.length : Number(post.likeCount ?? 0);
 
-    return {
+    const mapped = {
       id: post.id,
       author: post.author ? this.mapAuthor(post.author) : null,
       type: post.type.toLowerCase(),
@@ -137,7 +137,6 @@ export class PostsService {
       likeCount,
       commentCount: post.commentCount,
       shareCount: post.shareCount,
-      repostCount: post.repostCount,
       isLikedByCurrentUser: isLiked,
       isBookmarkedByCurrentUser: isBookmarked,
       isRepostedByCurrentUser: false, // extend later
@@ -145,6 +144,12 @@ export class PostsService {
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
     };
+
+    if (post.originalPost && !post.originalPost.isDeleted) {
+      (mapped as any).originalPost = this.mapPost(post.originalPost, currentUserId);
+    }
+
+    return mapped;
   }
 
   private async syncLikeCount(postId: string, tx?: any): Promise<number> {
@@ -180,6 +185,14 @@ export class PostsService {
     poll: { include: { options: true } },
     likes: { select: { userId: true } },
     bookmarks: { select: { userId: true } },
+    originalPost: {
+      include: {
+        author: true,
+        poll: { include: { options: true } },
+        likes: { select: { userId: true } },
+        bookmarks: { select: { userId: true } },
+      },
+    },
   };
 
   // ── Personal Feed ─────────────────────────────────────────
@@ -309,6 +322,14 @@ export class PostsService {
   async createPost(authorId: string, dto: CreatePostDto) {
     logger.info('Creating post', { authorId, type: dto.type });
 
+    if (dto.originalPostId) {
+      const originalPost = await this.prisma.post.findUnique({ where: { id: dto.originalPostId } });
+      if (!originalPost || originalPost.isDeleted) {
+        throw new NotFoundException('Bài gốc không tồn tại');
+      }
+      dto.type = 'repost' as any;
+    }
+
     const post = await this.prisma.$transaction(async (tx) => {
       const newPost = await tx.post.create({
         data: {
@@ -320,9 +341,17 @@ export class PostsService {
           visibility: (dto.visibility ?? 'public').toUpperCase() as any,
           groupId: dto.groupId ?? null,
           linkUrl: dto.linkUrl ?? null,
+          originalPostId: dto.originalPostId ?? null,
         },
         include: this.postInclude,
       });
+
+      if (dto.originalPostId) {
+        await tx.post.update({
+          where: { id: dto.originalPostId },
+          data: { shareCount: { increment: 1 } },
+        });
+      }
 
       // Create poll if provided
       if (dto.poll) {
@@ -429,6 +458,12 @@ export class PostsService {
         where: { userId: authorId },
         data: { postCount: { decrement: 1 } },
       });
+      if (post.originalPostId) {
+        await tx.post.update({
+          where: { id: post.originalPostId },
+          data: { shareCount: { decrement: 1 } },
+        });
+      }
     });
 
     return null;
