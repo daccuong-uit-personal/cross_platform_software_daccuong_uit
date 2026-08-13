@@ -55,6 +55,39 @@ export class CommentsProxyController {
     });
   }
 
+  @Get('reels/:reelId/comments')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Lấy danh sách comment của một reel' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  listReelComments(
+    @Param('reelId') reelId: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Request() req?: any,
+  ) {
+    const userId = req?.user?.sub;
+    const url = new URL(`${appConfig.SOCIAL_SERVICE_URL}/reels/${reelId}/comments`);
+    if (page) url.searchParams.set('page', page);
+    if (pageSize) url.searchParams.set('pageSize', pageSize);
+
+    return this.proxy.forward('GET', url.toString(), {
+      headers: userId ? { 'x-user-id': userId } : {},
+    });
+  }
+
+  @Post('reels/:reelId/comments')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Tạo comment mới cho reel' })
+  createReelComment(@Param('reelId') reelId: string, @Body() body: any, @Request() req: any) {
+    const userId = req.user?.sub;
+    return this.proxy.forward('POST', `${appConfig.SOCIAL_SERVICE_URL}/reels/${reelId}/comments`, {
+      body,
+      headers: userId ? { 'x-user-id': userId } : {},
+    });
+  }
+
   @Put('comments/:commentId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

@@ -33,6 +33,27 @@ export class CommentsController {
     return this.commentsService.create(postId, userId, dto);
   }
 
+  @Get('reels/:reelId/comments')
+  @ApiOperation({ summary: 'Lấy danh sách comment của một reel' })
+  listByReel(
+    @Param('reelId', ParseUUIDPipe) reelId: string,
+    @Query() query: PaginationQueryDto,
+    @CurrentUser() userId: string,
+  ) {
+    return this.commentsService.listByReel(reelId, query.page ?? 1, query.pageSize ?? 20, userId || undefined);
+  }
+
+  @Post('reels/:reelId/comments')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Thêm comment mới vào reel' })
+  createForReel(
+    @Param('reelId', ParseUUIDPipe) reelId: string,
+    @CurrentUser() userId: string,
+    @Body() dto: CreateCommentDto,
+  ) {
+    return this.commentsService.createForReel(reelId, userId, dto);
+  }
+
   @Put('comments/:commentId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cập nhật comment' })

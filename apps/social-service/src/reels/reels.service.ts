@@ -18,7 +18,7 @@ const logger = createLogger({ service: 'social-service:reels' });
 
 @Injectable()
 export class ReelsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   // ── Helpers ───────────────────────────────────────────────
   private buildPagination(page: number, pageSize: number, totalItems: number) {
@@ -44,20 +44,8 @@ export class ReelsService {
   }
 
   private mapReel(reel: any, currentUserId?: string) {
-    const reactions = reel.reactions ?? [];
-    const reactionCounts = reactions.reduce(
-      (acc: Record<string, number>, r: any) => {
-        const key = r.type.toLowerCase();
-        acc[key] = (acc[key] ?? 0) + 1;
-        return acc;
-      },
-      {},
-    );
-
     const isLiked = currentUserId
-      ? reactions.some(
-          (r: any) => r.userId === currentUserId && r.type === 'LIKE',
-        )
+      ? (reel.likes ?? []).some((l: any) => l.userId === currentUserId)
       : false;
 
     const isBookmarked = currentUserId
@@ -77,7 +65,6 @@ export class ReelsService {
       commentCount: reel.commentCount,
       shareCount: reel.shareCount,
       viewCount: reel.viewCount,
-      reactions: reactionCounts,
       isLikedByCurrentUser: isLiked,
       isBookmarkedByCurrentUser: isBookmarked,
       visibility: reel.visibility.toLowerCase(),
@@ -88,7 +75,7 @@ export class ReelsService {
 
   private readonly reelInclude = {
     author: true,
-    reactions: { select: { userId: true, type: true } },
+    likes: { select: { userId: true } },
     bookmarks: { select: { userId: true } },
   };
 
@@ -302,16 +289,16 @@ export class ReelsService {
       throw new NotFoundException('Reel không tồn tại');
     }
 
-    const existing = await this.prisma.reaction.findUnique({
+    const existing = await this.prisma.reelLike.findUnique({
       where: {
-        userId_targetId_targetType: { userId, targetId: reelId, targetType: 'REEL' },
+        userId_reelId: { userId, reelId },
       },
     });
 
     if (!existing) {
       await this.prisma.$transaction(async (tx) => {
-        await tx.reaction.create({
-          data: { userId, targetId: reelId, targetType: 'REEL', type: 'LIKE' },
+        await tx.reelLike.create({
+          data: { userId, reelId },
         });
         await tx.reel.update({
           where: { id: reelId },
@@ -330,17 +317,17 @@ export class ReelsService {
   async unlikeReel(reelId: string, userId: string) {
     logger.info('Unliking reel', { reelId, userId });
 
-    const existing = await this.prisma.reaction.findUnique({
+    const existing = await this.prisma.reelLike.findUnique({
       where: {
-        userId_targetId_targetType: { userId, targetId: reelId, targetType: 'REEL' },
+        userId_reelId: { userId, reelId },
       },
     });
 
     if (existing) {
       await this.prisma.$transaction(async (tx) => {
-        await tx.reaction.delete({
+        await tx.reelLike.delete({
           where: {
-            userId_targetId_targetType: { userId, targetId: reelId, targetType: 'REEL' },
+            userId_reelId: { userId, reelId },
           },
         });
         await tx.reel.update({

@@ -54,7 +54,7 @@ export class CommentsService {
     await Promise.all(notifications.map((notification) => this.notificationsService.push(notification)));
   }
 
-  private async resolveTopLevelParentId(postId: string, parentId?: string | null) {
+  private async resolveTopLevelParentId(postId: string | null, parentId?: string | null, reelId?: string | null) {
     if (!parentId) {
       return null;
     }
@@ -70,10 +70,10 @@ export class CommentsService {
 
       const currentComment = await this.prisma.comment.findUnique({
         where: { id: currentParentId },
-        select: { id: true, parentId: true, postId: true },
+        select: { id: true, parentId: true, postId: true, reelId: true },
       });
 
-      if (!currentComment || currentComment.postId !== postId) {
+      if (!currentComment || (postId && currentComment.postId !== postId) || (reelId && currentComment.reelId !== reelId)) {
         throw new NotFoundException('Comment cha không tồn tại');
       }
 
@@ -94,7 +94,8 @@ export class CommentsService {
 
     return {
       id: c.id,
-      postId: c.postId,
+      postId: c.postId ?? null,
+      reelId: c.reelId ?? null,
       parentId: c.parentId ?? null,
       author: c.author
         ? { id: c.author.userId, username: c.author.username, displayName: c.author.displayName, avatarUrl: c.author.avatarUrl, isVerified: c.author.isVerified }
@@ -141,7 +142,40 @@ export class CommentsService {
         pagination: this.buildPagination(page, pageSize, total),
         timestamp: new Date().toISOString(),
       },
-};
+    };
+  }
+
+  // ── List comments of a reel ───────────────────────────────
+  async listByReel(reelId: string, page: number, pageSize: number, currentUserId?: string) {
+    logger.info('Listing reel comments', { reelId, page });
+
+    const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
+    if (!reel || reel.isDeleted) throw new NotFoundException('Reel không tồn tại');
+
+    const [total, comments] = await Promise.all([
+      this.prisma.comment.count({ where: { reelId, parentId: null, isDeleted: false } }),
+      this.prisma.comment.findMany({
+        where: { reelId, parentId: null, isDeleted: false },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: [{ isPinned: 'desc' }, { createdAt: 'asc' }],
+        include: {
+          author: true,
+          commentLikes: currentUserId
+            ? { where: { userId: currentUserId }, select: { id: true } }
+            : false,
+        },
+      }),
+    ]);
+
+    return {
+      statusCode: 200,
+      data: comments.map((c) => this.mapComment(c, currentUserId)),
+      meta: {
+        pagination: this.buildPagination(page, pageSize, total),
+        timestamp: new Date().toISOString(),
+      },
+    };
   }
 
   // ── Create comment ────────────────────────────────────────
@@ -165,6 +199,38 @@ export class CommentsService {
         include: { author: true },
       });
       await tx.post.update({ where: { id: postId }, data: { commentCount: { increment: 1 } } });
+      if (resolvedParentId) {
+        await tx.comment.update({ where: { id: resolvedParentId }, data: { replyCount: { increment: 1 } } });
+      }
+      return c;
+    });
+
+    await this.notifyMentions(authorId, dto.content, comment.id, dto.mentionedUserIds ?? dto.mentionRanges?.map((range) => range.userId) ?? []);
+
+    return this.mapComment(comment, authorId, new Map());
+  }
+
+  // ── Create comment for reel ───────────────────────────────
+  async createForReel(reelId: string, authorId: string, dto: CreateCommentDto) {
+    logger.info('Creating reel comment', { reelId, authorId });
+
+    const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
+    if (!reel || reel.isDeleted) throw new NotFoundException('Reel không tồn tại');
+
+    const resolvedParentId = await this.resolveTopLevelParentId(null, dto.parentId, reelId);
+
+    const comment = await this.prisma.$transaction(async (tx) => {
+      const c = await tx.comment.create({
+        data: {
+          reelId,
+          authorId,
+          content: dto.content,
+          parentId: resolvedParentId,
+          mentionRanges: (dto.mentionRanges ?? []) as any,
+        } as any,
+        include: { author: true },
+      });
+      await tx.reel.update({ where: { id: reelId }, data: { commentCount: { increment: 1 } } });
       if (resolvedParentId) {
         await tx.comment.update({ where: { id: resolvedParentId }, data: { replyCount: { increment: 1 } } });
       }
@@ -205,7 +271,11 @@ export class CommentsService {
 
     await this.prisma.$transaction(async (tx) => {
       await tx.comment.update({ where: { id: commentId }, data: { isDeleted: true } });
-      await tx.post.update({ where: { id: comment.postId }, data: { commentCount: { decrement: 1 } } });
+      if (comment.postId) {
+        await tx.post.update({ where: { id: comment.postId }, data: { commentCount: { decrement: 1 } } });
+      } else if (comment.reelId) {
+        await tx.reel.update({ where: { id: comment.reelId }, data: { commentCount: { decrement: 1 } } });
+      }
       if (comment.parentId) {
         await tx.comment.update({ where: { id: comment.parentId }, data: { replyCount: { decrement: 1 } } });
       }
@@ -254,16 +324,25 @@ export class CommentsService {
 
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
-      include: { post: true },
+      include: { post: true, reel: true },
     });
     if (!comment || comment.isDeleted) throw new NotFoundException('Comment không tồn tại');
-    if (comment.post.authorId !== userId) throw new ForbiddenException('Chỉ tác giả bài đăng mới có thể ghim comment');
+    
+    const targetAuthorId = comment.post?.authorId || comment.reel?.authorId;
+    if (targetAuthorId !== userId) throw new ForbiddenException('Chỉ tác giả bài đăng mới có thể ghim comment');
 
-    // Unpin any existing pinned comment on this post first
-    await this.prisma.comment.updateMany({
-      where: { postId: comment.postId, isPinned: true },
-      data: { isPinned: false },
-    });
+    // Unpin any existing pinned comment on this post or reel first
+    if (comment.postId) {
+      await this.prisma.comment.updateMany({
+        where: { postId: comment.postId, isPinned: true },
+        data: { isPinned: false },
+      });
+    } else if (comment.reelId) {
+      await this.prisma.comment.updateMany({
+        where: { reelId: comment.reelId, isPinned: true },
+        data: { isPinned: false },
+      });
+    }
 
     await this.prisma.comment.update({ where: { id: commentId }, data: { isPinned: true } });
     return { message: 'Đã ghim comment' };
@@ -331,10 +410,12 @@ export class CommentsService {
 
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
-      include: { post: true },
+      include: { post: true, reel: true },
     });
     if (!comment || comment.isDeleted) throw new NotFoundException('Comment không tồn tại');
-    if (comment.post.authorId !== userId) throw new ForbiddenException('Chỉ tác giả bài đăng mới có thể bỏ ghim');
+    
+    const targetAuthorId = comment.post?.authorId || comment.reel?.authorId;
+    if (targetAuthorId !== userId) throw new ForbiddenException('Chỉ tác giả bài đăng mới có thể bỏ ghim');
 
     await this.prisma.comment.update({ where: { id: commentId }, data: { isPinned: false } });
     return { message: 'Đã bỏ ghim comment' };

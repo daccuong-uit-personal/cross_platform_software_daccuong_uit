@@ -5,6 +5,7 @@ import { FriendshipProxyController } from './friendship-proxy.controller';
 import { FollowProxyController } from './follow-proxy.controller';
 import { PostsProxyController } from './posts-proxy.controller';
 import { CommentsProxyController } from './comments-proxy.controller';
+import { ReelsProxyController } from './reels-proxy.controller';
 import { HttpProxyService } from '../common/services/http-proxy.service';
 
 @Module({
@@ -15,6 +16,7 @@ import { HttpProxyService } from '../common/services/http-proxy.service';
     FollowProxyController,
     PostsProxyController,
     CommentsProxyController,
+    ReelsProxyController,
   ],
   providers: [HttpProxyService],
 })
