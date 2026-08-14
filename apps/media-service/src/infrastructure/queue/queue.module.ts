@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
-import { appConfig } from '../config/app.config';
+import { appConfig } from '../../config/app.config';
 
 @Module({
   imports: [
@@ -17,4 +17,4 @@ import { appConfig } from '../config/app.config';
   ],
   exports: [BullModule],
 })
-export class JobsModule {}
+export class QueueModule { }

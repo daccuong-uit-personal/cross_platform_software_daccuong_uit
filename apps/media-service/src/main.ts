@@ -54,6 +54,12 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // Health check endpoint moved from app.controller.ts
+  const httpAdapter = app.getHttpAdapter();
+  httpAdapter.get('/health', (req, res) => {
+    res.status(200).send({ status: 'ok', service: 'media-service' });
+  });
+
   await app.listen(appConfig.PORT, '0.0.0.0');
   console.log(`[media-service] Listening on port ${appConfig.PORT}`);
 }

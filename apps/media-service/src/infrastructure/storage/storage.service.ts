@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit, InternalServerErrorException } from '@nestjs/common';
 import * as Minio from 'minio';
-import { appConfig } from '../config/app.config';
+import { appConfig } from '../../config/app.config';
 import { createLogger } from '@platform/logger';
 
 const logger = createLogger({ service: 'media-service:storage' });

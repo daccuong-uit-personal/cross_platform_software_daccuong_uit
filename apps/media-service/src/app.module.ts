@@ -1,8 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { MediaModule } from './media/media.module';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { MediaModule } from './modules/media/media.module';
 
 @Module({
   imports: [
@@ -11,7 +9,5 @@ import { AppService } from './app.service';
     }),
     MediaModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}
