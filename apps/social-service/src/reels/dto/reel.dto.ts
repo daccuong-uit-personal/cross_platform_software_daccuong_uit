@@ -31,9 +31,15 @@ export class CreateReelDto {
   @MaxLength(1000)
   content!: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  videoUrl!: string;
+  mediaId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  videoUrl?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

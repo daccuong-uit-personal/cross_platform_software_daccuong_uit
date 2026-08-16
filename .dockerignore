@@ -1,0 +1,17 @@
+﻿node_modules
+**/node_modules
+dist
+**/dist
+.git
+.gitignore
+*.log
+infra
+apps/auth-service
+apps/gateway
+apps/identity-service
+apps/social-service
+apps/media-service
+libs
+packages
+.turbo
+coverage

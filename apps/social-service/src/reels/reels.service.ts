@@ -183,12 +183,41 @@ export class ReelsService {
   async createReel(authorId: string, dto: CreateReelDto) {
     logger.info('Creating reel', { authorId });
 
+    let finalVideoUrl = dto.videoUrl;
+    let finalThumbnailUrl = dto.thumbnailUrl;
+
+    if (dto.mediaId) {
+      try {
+        const mediaServiceUrl = process.env.MEDIA_SERVICE_URL || 'http://localhost:3003';
+        const response = await fetch(`${mediaServiceUrl}/media/${dto.mediaId}/preview`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch media information');
+        }
+        const mediaPreview: any = await response.json();
+        
+        if (mediaPreview.status !== 'ready') {
+          throw new ForbiddenException('Media is not ready yet');
+        }
+
+        // Prefer HLS stream if available, otherwise direct download URL
+        finalVideoUrl = mediaPreview.hlsPath ? `${mediaServiceUrl}/media/${dto.mediaId}/hls/index.m3u8` : mediaPreview.downloadUrl;
+        finalThumbnailUrl = mediaPreview.thumbnailPath ? `${mediaServiceUrl}/media/${dto.mediaId}/thumbnail` : dto.thumbnailUrl;
+      } catch (err: any) {
+        logger.error(`Error verifying media ${dto.mediaId}`, err);
+        throw new ForbiddenException(err.message || 'Error verifying media');
+      }
+    }
+
+    if (!finalVideoUrl) {
+      throw new ForbiddenException('Video URL or ready Media ID is required');
+    }
+
     const reel = await this.prisma.reel.create({
       data: {
         authorId,
         content: dto.content,
-        videoUrl: dto.videoUrl,
-        thumbnailUrl: dto.thumbnailUrl ?? null,
+        videoUrl: finalVideoUrl,
+        thumbnailUrl: finalThumbnailUrl ?? null,
         duration: dto.duration ?? null,
         hashtags: this.extractHashtags(dto.content),
         musicId: dto.musicId ?? null,

@@ -93,6 +93,29 @@ export class StorageService implements OnModuleInit {
     }
   }
 
+  /**
+   * Stream a byte range of an object from MinIO without buffering.
+   * Uses MinIO SDK's getPartialObject(bucket, object, offset, length).
+   *
+   * @param fileName  Object name in MinIO
+   * @param offset    First byte to read (0-based, inclusive)
+   * @param length    Number of bytes to read. 0 means read to end of object.
+   */
+  async getFileStreamRange(fileName: string, offset: number, length: number): Promise<any> {
+    try {
+      return await this.minioClient.getPartialObject(
+        appConfig.MINIO_BUCKET,
+        fileName,
+        offset,
+        length,
+      );
+    } catch (error: any) {
+      logger.error(`Error getting partial object from MinIO: ${error.message}`);
+      throw new InternalServerErrorException('Failed to retrieve partial file stream');
+    }
+  }
+
+
   async getPresignedUrl(fileName: string, expiry: number = 3600) {
     try {
       return await this.minioClient.presignedGetObject(appConfig.MINIO_BUCKET, fileName, expiry);
@@ -108,6 +131,27 @@ export class StorageService implements OnModuleInit {
     } catch (error: any) {
       logger.error(`Error deleting file from MinIO: ${error.message}`);
       throw new InternalServerErrorException('File deletion failed');
+    }
+  }
+
+  async getPresignedPutUrl(fileName: string, mimeType: string, expiry: number = 3600) {
+    try {
+      // Must enforce Content-Type to prevent arbitrary file uploads
+      return await this.minioClient.presignedUrl('PUT', appConfig.MINIO_BUCKET, fileName, expiry, {
+        'Content-Type': mimeType
+      });
+    } catch (error: any) {
+      logger.error(`Error generating presigned PUT URL: ${error.message}`);
+      throw new InternalServerErrorException('Failed to generate upload URL');
+    }
+  }
+
+  async statObject(fileName: string) {
+    try {
+      return await this.minioClient.statObject(appConfig.MINIO_BUCKET, fileName);
+    } catch (error: any) {
+      logger.error(`Error getting object stats from MinIO for ${fileName}: ${error.message}`);
+      throw new InternalServerErrorException('Failed to verify object existence on MinIO');
     }
   }
 }

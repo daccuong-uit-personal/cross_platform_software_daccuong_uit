@@ -24,6 +24,39 @@ import { MediaService } from './media.service';
 export class MediaController {
   constructor(private readonly mediaService: MediaService) {}
 
+  @Post('presigned-upload')
+  @ApiOperation({ summary: 'Get a presigned URL to upload a file directly to MinIO' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        originalName: { type: 'string' },
+        mimeType: { type: 'string' },
+        fileSize: { type: 'number' },
+        userId: { type: 'string' },
+      },
+    },
+  })
+  async getPresignedUpload(
+    @Body() body: { originalName: string; mimeType: string; fileSize: number; userId?: string },
+    @Headers('x-user-id') userIdFromHeader: string,
+    @Req() req: any,
+  ) {
+    const userId = userIdFromHeader || body.userId || req.user?.id || '00000000-0000-0000-0000-000000000000';
+    return this.mediaService.createPresignedUpload(userId, body.originalName, body.mimeType, body.fileSize);
+  }
+
+  @Post(':id/complete')
+  @ApiOperation({ summary: 'Complete a direct upload and start processing' })
+  async completeUpload(@Param('id', ParseUUIDPipe) id: string) {
+    const media = await this.mediaService.completeUpload(id);
+    return {
+      id: media.id,
+      fileName: media.file_name,
+      status: media.status,
+    };
+  }
+
   @Post('upload')
   @ApiOperation({ summary: 'Upload a media file' })
   @ApiConsumes('multipart/form-data')
@@ -250,20 +283,57 @@ export class MediaController {
   }
 
   @Get(':id/stream')
-  @ApiOperation({ summary: 'Stream media file' })
-  @ApiResponse({ status: 200, description: 'Binary stream of the media' })
-  async streamFile(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
-    const { stream, mimeType, originalName, size } = await this.mediaService.getMediaStream(id);
-    
-    res.setHeader('Content-Type', mimeType);
-    res.setHeader('Content-Disposition', `inline; filename="${originalName}"`);
-    res.setHeader('Accept-Ranges', 'bytes');
-    if (size) {
-      res.setHeader('Content-Length', size.toString());
+  @ApiOperation({ summary: 'Stream media file with HTTP Range support' })
+  @ApiHeader({ name: 'Range', description: 'Byte range (e.g. bytes=0-1023)', required: false })
+  @ApiResponse({ status: 200, description: 'Full stream (no Range header)' })
+  @ApiResponse({ status: 206, description: 'Partial content (Range request satisfied)' })
+  @ApiResponse({ status: 416, description: 'Range Not Satisfiable' })
+  async streamFile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('range') rangeHeader: string | undefined,
+    @Res() res: Response,
+  ) {
+    // ── 416 guard: if range header exists but is malformed / unsatisfiable ──
+    let result: Awaited<ReturnType<typeof this.mediaService.getMediaStreamRange>>;
+    try {
+      result = await this.mediaService.getMediaStreamRange(id, rangeHeader);
+    } catch (err: any) {
+      if (err.status === 416) {
+        // Must return Content-Range: bytes */totalSize on 416
+        // We need to fetch just the size – use getMedia which throws 404 if missing
+        try {
+          const meta = await this.mediaService.getMedia(id);
+          const total = Number(meta.file_size);
+          res.setHeader('Content-Range', `bytes */${total}`);
+        } catch {
+          // Media not found at all
+        }
+        return res.status(416).end();
+      }
+      throw err; // propagate 404 / 500 etc.
     }
-    
+
+    const { stream, mimeType, originalName, totalSize, start, end, chunkSize, isPartial } = result;
+
+    // ── Common headers ────────────────────────────────────────────────────────
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Disposition', `inline; filename="${originalName}"`);
+
+    if (isPartial) {
+      // 206 Partial Content
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${totalSize}`);
+      res.setHeader('Content-Length', chunkSize);
+      res.status(206);
+    } else {
+      // 200 OK – full file
+      res.setHeader('Content-Length', totalSize);
+      res.status(200);
+    }
+
     stream.pipe(res);
   }
+
 
   @Get(':id/hls/index.m3u8')
   @ApiOperation({ summary: 'Get HLS playlist' })
@@ -311,13 +381,14 @@ export class MediaController {
       properties: {
         status: { type: 'string', enum: ['pending', 'processing', 'ready', 'failed'] },
         metadata: { type: 'object' },
+        thumbnail_path: { type: 'string' }
       },
     },
   })
   async updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { status: string; metadata?: any },
+    @Body() body: { status: string; metadata?: any; thumbnail_path?: string },
   ) {
-    return this.mediaService.updateStatus(id, body.status, body.metadata);
+    return this.mediaService.updateStatus(id, body.status, body.metadata, body.thumbnail_path);
   }
 }

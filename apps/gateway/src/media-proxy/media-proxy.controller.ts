@@ -67,6 +67,38 @@ export class MediaProxyController {
     });
   }
 
+  @Post('presigned-upload')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get a presigned URL to upload a file directly to MinIO' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        originalName: { type: 'string' },
+        mimeType: { type: 'string' },
+        fileSize: { type: 'number' },
+      },
+    },
+  })
+  async getPresignedUpload(@Body() body: any, @Req() req: any) {
+    const userId = req.user?.sub || '00000000-0000-0000-0000-000000000000';
+    return this.proxy.forward('POST', `${appConfig.MEDIA_SERVICE_URL}/media/presigned-upload`, {
+      body: { ...body, userId },
+      headers: {
+        'x-user-id': userId,
+      },
+    });
+  }
+
+  @Post(':id/complete')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Complete a direct upload and start processing' })
+  async completeUpload(@Param('id') id: string) {
+    return this.proxy.forward('POST', `${appConfig.MEDIA_SERVICE_URL}/media/${id}/complete`);
+  }
+
   @Post('upload-stream')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

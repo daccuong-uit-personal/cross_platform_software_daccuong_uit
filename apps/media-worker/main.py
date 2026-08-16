@@ -40,6 +40,8 @@ def update_status(media_id, status, metadata=None):
     try:
         url = f"{MEDIA_SERVICE_URL}/media/{media_id}/status"
         payload = {"status": status, "metadata": metadata or {}}
+        if metadata and "thumbnail" in metadata:
+            payload["thumbnail_path"] = metadata["thumbnail"]
         requests.post(url, json=payload) 
         logger.info(f"Updated status for {media_id} to {status} via API")
     except Exception as e:
@@ -61,48 +63,64 @@ def get_metadata(file_path):
 def process_image(media_id, storage_path):
     logger.info(f"Processing image {media_id}...")
     
-    with tempfile.NamedTemporaryFile(delete=False) as tmp:
-        mc.fget_object(MINIO_BUCKET, storage_path, tmp.name)
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as tmp:
+        tmp_name = tmp.name
+
+    try:
+        mc.fget_object(MINIO_BUCKET, storage_path, tmp_name)
         
-        img = Image.open(tmp.name)
+        img = Image.open(tmp_name)
         width, height = img.size
+        img_format = img.format
         
         # Create Thumbnail
         img.thumbnail((300, 300))
         thumb_io = io.BytesIO()
         img.save(thumb_io, format='WEBP', quality=80)
         thumb_io.seek(0)
+        img.close()
         
         thumb_name = f"thumbnails/{media_id}_300x300.webp"
+        thumb_data = thumb_io.getvalue()
         mc.put_object(
             MINIO_BUCKET,
             thumb_name,
-            thumb_io,
-            len(thumb_io.getvalue()),
+            io.BytesIO(thumb_data),
+            len(thumb_data),
             content_type='image/webp'
         )
         
-        os.unlink(tmp.name)
         return {
             "thumbnail": thumb_name,
             "width": width,
             "height": height,
-            "format": img.format
+            "format": img_format
         }
+    finally:
+        try:
+            os.unlink(tmp_name)
+        except: pass
+
 
 def process_video(media_id, storage_path):
     logger.info(f"Processing video {media_id}...")
     
+    # Create temp file path without keeping it open (Windows file locking fix)
     with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_in:
-        mc.fget_object(MINIO_BUCKET, storage_path, tmp_in.name)
+        tmp_in_name = tmp_in.name
+    
+    tmp_thumb = tempfile.mktemp(suffix='.jpg')
+    hls_dir = tempfile.mkdtemp()
+    
+    try:
+        mc.fget_object(MINIO_BUCKET, storage_path, tmp_in_name)
         
         # 0. Get Metadata
-        metadata = get_metadata(tmp_in.name)
+        metadata = get_metadata(tmp_in_name)
         
         # 1. Extract Thumbnail
-        tmp_thumb = tempfile.mktemp(suffix='.jpg')
         subprocess.run([
-            'ffmpeg', '-y', '-i', tmp_in.name, 
+            'ffmpeg', '-y', '-i', tmp_in_name, 
             '-ss', '00:00:01', '-vframes', '1', 
             tmp_thumb
         ], check=True, capture_output=True)
@@ -111,11 +129,10 @@ def process_video(media_id, storage_path):
         mc.fput_object(MINIO_BUCKET, thumb_name, tmp_thumb, content_type='image/jpeg')
 
         # 2. HLS Transcoding (Basic)
-        hls_dir = tempfile.mkdtemp()
         hls_playlist = os.path.join(hls_dir, 'index.m3u8')
         
         subprocess.run([
-            'ffmpeg', '-y', '-i', tmp_in.name,
+            'ffmpeg', '-y', '-i', tmp_in_name,
             '-profile:v', 'baseline', '-level', '3.0',
             '-s', '1280x720', '-start_number', '0',
             '-hls_time', '10', '-hls_list_size', '0',
@@ -123,21 +140,11 @@ def process_video(media_id, storage_path):
         ], check=True, capture_output=True)
 
         # 3. Upload HLS Segments
-        uploaded_files = []
         for root, dirs, files in os.walk(hls_dir):
             for file in files:
                 local_path = os.path.join(root, file)
                 remote_path = f"hls/{media_id}/{file}"
                 mc.fput_object(MINIO_BUCKET, remote_path, local_path)
-                uploaded_files.append(remote_path)
-
-        # Cleanup
-        try:
-            os.unlink(tmp_in.name)
-            os.unlink(tmp_thumb)
-            import shutil
-            shutil.rmtree(hls_dir)
-        except: pass
 
         return {
             "thumbnail": thumb_name,
@@ -145,19 +152,30 @@ def process_video(media_id, storage_path):
             "metadata": metadata,
             "type": "video"
         }
+    finally:
+        import shutil
+        for p in [tmp_in_name, tmp_thumb]:
+            try: os.unlink(p)
+            except: pass
+        try: shutil.rmtree(hls_dir)
+        except: pass
 
 def process_audio(media_id, storage_path):
     logger.info(f"Processing audio {media_id}...")
     
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_in:
-        mc.fget_object(MINIO_BUCKET, storage_path, tmp_in.name)
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as tmp_in:
+        tmp_in_name = tmp_in.name
+    
+    tmp_out = tempfile.mktemp(suffix='.mp3')
+    
+    try:
+        mc.fget_object(MINIO_BUCKET, storage_path, tmp_in_name)
         
-        metadata = get_metadata(tmp_in.name)
+        metadata = get_metadata(tmp_in_name)
         
         # Transcode to MP3 if not already
-        tmp_out = tempfile.mktemp(suffix='.mp3')
         subprocess.run([
-            'ffmpeg', '-y', '-i', tmp_in.name,
+            'ffmpeg', '-y', '-i', tmp_in_name,
             '-codec:a', 'libmp3lame', '-qscale:a', '2',
             tmp_out
         ], check=True, capture_output=True)
@@ -165,14 +183,15 @@ def process_audio(media_id, storage_path):
         remote_path = f"processed/{media_id}.mp3"
         mc.fput_object(MINIO_BUCKET, remote_path, tmp_out, content_type='audio/mpeg')
         
-        os.unlink(tmp_in.name)
-        os.unlink(tmp_out)
-        
         return {
             "processed_path": remote_path,
             "metadata": metadata,
             "type": "audio"
         }
+    finally:
+        for p in [tmp_in_name, tmp_out]:
+            try: os.unlink(p)
+            except: pass
 
 def process_job(job_data):
     data = job_data.get('data', {})
@@ -206,9 +225,30 @@ def main():
     
     while True:
         try:
-            job = r.blpop(queue_name, timeout=10)
-            if job:
-                job_data = json.loads(job[1])
+            item = r.blpop(queue_name, timeout=10)
+            if item:
+                # BullMQ stores job ID in the wait list, actual data in a hash key
+                job_id = item[1]
+                if isinstance(job_id, bytes):
+                    job_id = job_id.decode('utf-8')
+                
+                job_key = f"bull:media-processing:{job_id}"
+                job_hash = r.hgetall(job_key)
+                
+                if not job_hash:
+                    logger.warning(f"Job {job_id} not found in Redis hash")
+                    continue
+                
+                data_raw = job_hash.get(b'data') or job_hash.get('data')
+                if not data_raw:
+                    logger.warning(f"Job {job_id} has no data field")
+                    continue
+                
+                if isinstance(data_raw, bytes):
+                    data_raw = data_raw.decode('utf-8')
+                
+                job_data = {"data": json.loads(data_raw)}
+                logger.info(f"Processing job {job_id}: {job_data}")
                 process_job(job_data)
         except Exception as e:
             logger.error(f"Worker error: {e}")
