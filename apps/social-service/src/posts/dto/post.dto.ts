@@ -81,7 +81,7 @@ export class CreatePostDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  mediaUrls?: string[];
+  mediaIds?: string[];
 
   @ApiPropertyOptional({ type: [String], example: [] })
   @IsOptional()

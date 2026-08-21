@@ -15,37 +15,7 @@ export class MediaService {
     @InjectQueue('media-processing') private readonly mediaQueue: Queue,
   ) {}
 
-  async createMedia(userId: string, file: Express.Multer.File): Promise<Media> {
-    const fileId = uuidv4();
-    const ext = path.extname(file.originalname);
-    const fileName = `${fileId}${ext}`;
-    
-    // 1. Upload to MinIO
-    await this.storage.uploadFile(fileName, file.buffer, file.size, file.mimetype);
 
-    // 2. Save to DB
-    const media = await this.prisma.media.create({
-      data: {
-        id: fileId,
-        file_name: fileName,
-        original_name: file.originalname,
-        mime_type: file.mimetype,
-        file_size: BigInt(file.size),
-        storage_path: fileName,
-        user_id: userId,
-        status: 'pending', // Change to pending for background processing
-      },
-    });
-
-    // 3. Add to processing queue
-    await this.mediaQueue.add('process', {
-      mediaId: media.id,
-      storagePath: media.storage_path,
-      mimeType: media.mime_type,
-    });
-
-    return media;
-  }
 
   async createPresignedUpload(userId: string, originalName: string, mimeType: string, fileSize: number): Promise<{ mediaId: string; uploadUrl: string }> {
     const fileId = uuidv4();
@@ -62,6 +32,7 @@ export class MediaService {
         mime_type: mimeType,
         file_size: BigInt(fileSize),
         storage_path: fileName,
+        fallback_url: fileName,
         user_id: userId,
         status: 'pending',
       },
@@ -94,85 +65,7 @@ export class MediaService {
     return updatedMedia;
   }
 
-  async uploadBase64(userId: string, base64: string, originalName: string): Promise<Media> {
-    const buffer = Buffer.from(base64, 'base64');
-    const mimeType = 'application/octet-stream'; // Ideally, extract from base64 if it has header
-    
-    // Simple way to handle data:image/png;base64,...
-    let cleanBase64 = base64;
-    let detectedMime = mimeType;
-    if (base64.startsWith('data:')) {
-      const parts = base64.split(';base64,');
-      detectedMime = parts[0].replace('data:', '');
-      cleanBase64 = parts[1];
-    }
-    
-    const finalBuffer = Buffer.from(cleanBase64, 'base64');
-    const fileId = uuidv4();
-    const ext = path.extname(originalName) || `.${detectedMime.split('/')[1]}`;
-    const fileName = `${fileId}${ext}`;
 
-    await this.storage.uploadFile(fileName, finalBuffer, finalBuffer.length, detectedMime);
-
-    const media = await this.prisma.media.create({
-      data: {
-        id: fileId,
-        file_name: fileName,
-        original_name: originalName,
-        mime_type: detectedMime,
-        file_size: BigInt(finalBuffer.length),
-        storage_path: fileName,
-        user_id: userId,
-        status: 'pending',
-      },
-    });
-
-    await this.mediaQueue.add('process', {
-      mediaId: media.id,
-      storagePath: media.storage_path,
-      mimeType: media.mime_type,
-    });
-
-    return media;
-  }
-
-  async createMediaFromStream(
-    userId: string,
-    stream: any,
-    originalName: string,
-    mimeType: string,
-    size?: number,
-  ): Promise<Media> {
-    const fileId = uuidv4();
-    const ext = path.extname(originalName) || '.bin';
-    const fileName = `${fileId}${ext}`;
-
-    // 1. Upload Stream to MinIO
-    await this.storage.uploadStream(fileName, stream, size, mimeType);
-
-    // 2. Save to DB
-    const media = await this.prisma.media.create({
-      data: {
-        id: fileId,
-        file_name: fileName,
-        original_name: originalName,
-        mime_type: mimeType,
-        file_size: size ? BigInt(size) : BigInt(0),
-        storage_path: fileName,
-        user_id: userId,
-        status: 'pending',
-      },
-    });
-
-    // 3. Add to processing queue
-    await this.mediaQueue.add('process', {
-      mediaId: media.id,
-      storagePath: media.storage_path,
-      mimeType: media.mime_type,
-    });
-
-    return media;
-  }
 
   async listMedia(query: {
     userId?: string;
@@ -215,14 +108,37 @@ export class MediaService {
     });
   }
 
-  async getStatus(id: string): Promise<{ id: string; status: string; metadata: any; mime_type: string; created_at: Date } > {
+  async getStatus(id: string): Promise<{
+    id: string;
+    status: string;
+    metadata: any;
+    mime_type: string;
+    created_at: Date;
+    thumbnailPath: string | null;
+    duration: number | null;
+  }> {
     const media = await this.getMedia(id);
+    const metadata = media.metadata as any;
+
+    // Extract duration from ffprobe metadata if available
+    let duration: number | null = null;
+    if (metadata?.metadata?.format?.duration) {
+      duration = parseFloat(metadata.metadata.format.duration);
+    } else if (metadata?.metadata?.streams) {
+      const videoStream = metadata.metadata.streams.find((s: any) => s.codec_type === 'video');
+      if (videoStream?.duration) {
+        duration = parseFloat(videoStream.duration);
+      }
+    }
+
     return {
       id: media.id,
       status: media.status,
-      metadata: media.metadata,
+      metadata: metadata,
       mime_type: media.mime_type,
       created_at: media.created_at,
+      thumbnailPath: (media as any).thumbnail_path ?? metadata?.thumbnail ?? null,
+      duration,
     };
   }
 
@@ -238,7 +154,7 @@ export class MediaService {
       mimeType: media.mime_type,
       fileSize: media.file_size.toString(),
       status: media.status,
-      thumbnailPath: metadata?.thumbnail || null,
+      thumbnailPath: (media as any).thumbnail_path || metadata?.thumbnail || null,
       hlsPath: metadata?.hls_path || null,
       processedPath: metadata?.processed_path || null,
       metadata: metadata || {},
@@ -279,133 +195,74 @@ export class MediaService {
     await this.prisma.media.delete({ where: { id } });
   }
 
-  async updateStatus(id: string, status: string, metadata?: any, thumbnail_path?: string): Promise<Media> {
+  async updateStatus(id: string, status: string, metadata?: any, thumbnail_path?: string, storage_path?: string, fallback_url?: string): Promise<Media> {
+    const data: any = { status };
+    if (metadata !== undefined) data.metadata = metadata;
+    if (thumbnail_path !== undefined) data.thumbnail_path = thumbnail_path;
+    if (storage_path !== undefined) data.storage_path = storage_path;
+    if (fallback_url !== undefined) data.fallback_url = fallback_url;
     return this.prisma.media.update({
       where: { id },
-      data: { 
-        status,
-        metadata: metadata ?? undefined,
-        thumbnail_path: thumbnail_path ?? undefined
-      },
+      data,
     });
   }
 
-  async getMediaStream(id: string): Promise<{ stream: any; mimeType: string; originalName: string; size: number }> {
+  async getAccessUrls(id: string): Promise<any> {
     const media = await this.getMedia(id);
-    const stream = await this.storage.getFileStream(media.storage_path);
+    const metadata = media.metadata as any;
+    
+    // Generate original URL
+    const originalUrl = await this.storage.getPresignedUrl(media.storage_path);
+    
+    let thumbnailUrl = null;
+    if ((media as any).thumbnail_path) {
+      thumbnailUrl = await this.storage.getPresignedUrl((media as any).thumbnail_path);
+    } else if (metadata?.thumbnail) {
+      thumbnailUrl = await this.storage.getPresignedUrl(metadata.thumbnail);
+    }
+    
+    let hlsUrl = null;
+    if (metadata?.hls_path) {
+      hlsUrl = await this.storage.getPresignedUrl(metadata.hls_path);
+    }
+    
+    let fallbackUrl = null;
+    if ((media as any).fallback_url) {
+      fallbackUrl = await this.storage.getPresignedUrl((media as any).fallback_url);
+    }
+    
     return {
-      stream,
-      mimeType: media.mime_type,
-      originalName: media.original_name,
-      size: Number(media.file_size),
+      original: originalUrl,
+      thumbnail: thumbnailUrl,
+      hls: hlsUrl,
+      fallback: fallbackUrl
     };
   }
 
-  /**
-   * Get a partial stream of a media file for HTTP Range requests.
-   * Returns the partial MinIO stream together with resolved byte range info.
-   */
-  async getMediaStreamRange(
-    id: string,
-    rangeHeader: string | undefined,
-  ): Promise<{
-    stream: any;
-    mimeType: string;
-    originalName: string;
-    totalSize: number;
-    start: number;
-    end: number;
-    chunkSize: number;
-    isPartial: boolean;
-  }> {
+  async getRewrittenHlsPlaylist(id: string): Promise<string> {
     const media = await this.getMedia(id);
-    const totalSize = Number(media.file_size);
-
-    // ─── Parse Range header ────────────────────────────────────────────────────
-    if (!rangeHeader) {
-      // No Range → full object, 200
-      const stream = await this.storage.getFileStream(media.storage_path);
-      return {
-        stream,
-        mimeType: media.mime_type,
-        originalName: media.original_name,
-        totalSize,
-        start: 0,
-        end: totalSize - 1,
-        chunkSize: totalSize,
-        isPartial: false,
-      };
+    const metadata = media.metadata as any;
+    if (!metadata?.hls_path) {
+      throw new NotFoundException('HLS not ready or not supported for this media');
     }
-
-    const parsed = this.parseRangeHeader(rangeHeader, totalSize);
-    const { start, end } = parsed;
-    const chunkSize = end - start + 1;
-
-    const stream = await this.storage.getFileStreamRange(media.storage_path, start, chunkSize);
-
-    return {
-      stream,
-      mimeType: media.mime_type,
-      originalName: media.original_name,
-      totalSize,
-      start,
-      end,
-      chunkSize,
-      isPartial: true,
-    };
-  }
-
-  /**
-   * Parse "bytes=start-end" / "bytes=start-" / "bytes=-suffix" into { start, end }.
-   * Throws with status 416 if the range is unsatisfiable.
-   */
-  parseRangeHeader(rangeHeader: string, totalSize: number): { start: number; end: number } {
-    const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
-    if (!match) {
-      const err: any = new Error('Invalid Range header');
-      err.status = 416;
-      throw err;
-    }
-
-    const rawStart = match[1];
-    const rawEnd = match[2];
-
-    let start: number;
-    let end: number;
-
-    if (rawStart === '' && rawEnd !== '') {
-      // bytes=-suffixLength  →  last N bytes
-      const suffix = parseInt(rawEnd, 10);
-      start = Math.max(0, totalSize - suffix);
-      end = totalSize - 1;
-    } else if (rawStart !== '' && rawEnd === '') {
-      // bytes=start-  →  from start to EOF
-      start = parseInt(rawStart, 10);
-      end = totalSize - 1;
-    } else {
-      // bytes=start-end
-      start = parseInt(rawStart, 10);
-      end = parseInt(rawEnd, 10);
-    }
-
-    // Validate
-    if (
-      isNaN(start) ||
-      isNaN(end) ||
-      start > end ||
-      start >= totalSize ||
-      end >= totalSize
-    ) {
-      const err: any = new Error('Range Not Satisfiable');
-      err.status = 416;
-      throw err;
-    }
-
-    return { start, end };
-  }
-
-  async getMediaStreamByIdentifier(storagePath: string): Promise<{ stream: any }> {
-    const stream = await this.storage.getFileStream(storagePath);
-    return { stream };
+    
+    // Fetch the m3u8 file content from MinIO
+    const buffer = await this.storage.getFile(metadata.hls_path);
+    const m3u8Text = buffer.toString('utf8');
+    
+    // The m3u8 file has lines like "segment_0.ts". We need to replace them with presigned URLs.
+    const lines = m3u8Text.split('\n');
+    const rewrittenLines = await Promise.all(lines.map(async (line) => {
+      // If line is a .ts file (not a comment or empty line)
+      if (line.trim() && !line.startsWith('#')) {
+        const segmentPath = `hls/${id}/${line.trim()}`;
+        // Generate presigned URL for the segment
+        const presignedUrl = await this.storage.getPresignedUrl(segmentPath);
+        return presignedUrl;
+      }
+      return line;
+    }));
+    
+    return rewrittenLines.join('\n');
   }
 }

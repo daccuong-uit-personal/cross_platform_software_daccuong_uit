@@ -7,25 +7,32 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { createLogger } from '@platform/logger';
 import { CreateGroupDto, UpdateGroupDto, UpdateMemberRoleDto, InviteMembersDto } from './dto/group.dto';
+import { MediaResolverService } from '../common/services/media-resolver.service';
 
 const logger = createLogger({ service: 'social-service:groups' });
 
 @Injectable()
 export class GroupsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mediaResolver: MediaResolverService,
+  ) {}
 
   private buildPagination(page: number, pageSize: number, totalItems: number) {
     const totalPages = Math.ceil(totalItems / pageSize);
     return { currentPage: page, totalPages, totalItems, itemsPerPage: pageSize, hasNext: page < totalPages };
   }
 
-  private mapGroup(g: any, userId?: string) {
+  private mapGroup(g: any, userId?: string, urlMap: Record<string, any> = {}) {
     const membership = g.members?.find((m: any) => m.userId === userId);
+    const coverUrls = g.coverMediaId ? urlMap[g.coverMediaId]?.data : null;
+
     return {
       id: g.id,
       name: g.name,
       description: g.description,
-      coverUrl: g.coverUrl,
+      coverMediaId: g.coverMediaId,
+      coverUrl: coverUrls?.original || null,
       privacy: g.privacy.toLowerCase(),
       memberCount: g.memberCount,
       postCount: g.postCount,
@@ -34,6 +41,14 @@ export class GroupsService {
       myRole: membership ? membership.role.toLowerCase() : null,
       createdAt: g.createdAt,
     };
+  }
+
+  private collectGroupMediaIds(groups: any[]): string[] {
+    const ids = new Set<string>();
+    for (const g of groups) {
+      if (g.coverMediaId) ids.add(g.coverMediaId);
+    }
+    return [...ids];
   }
 
   private async assertAdminOrModerator(groupId: string, userId: string) {
@@ -60,9 +75,10 @@ export class GroupsService {
         include: this.groupInclude,
       }),
     ]);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectGroupMediaIds(groups));
     return {
       statusCode: 200,
-      data: groups.map((g) => this.mapGroup(g, userId)),
+      data: groups.map((g) => this.mapGroup(g, userId, urlMap)),
       meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
@@ -79,9 +95,10 @@ export class GroupsService {
         orderBy: { joinedAt: 'desc' },
       }),
     ]);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectGroupMediaIds(memberships.map(m => m.group)));
     return {
       statusCode: 200,
-      data: memberships.map((m) => this.mapGroup(m.group, userId)),
+      data: memberships.map((m) => this.mapGroup(m.group, userId, urlMap)),
       meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
@@ -90,7 +107,8 @@ export class GroupsService {
   async getById(groupId: string, userId?: string) {
     const group = await this.prisma.group.findUnique({ where: { id: groupId }, include: this.groupInclude });
     if (!group) throw new NotFoundException('Nhóm không tồn tại');
-    return this.mapGroup(group, userId);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectGroupMediaIds([group]));
+    return this.mapGroup(group, userId, urlMap);
   }
 
   // ── Create ────────────────────────────────────────────────
@@ -102,7 +120,7 @@ export class GroupsService {
         data: {
           name: dto.name,
           description: dto.description,
-          coverUrl: dto.coverUrl,
+          coverMediaId: dto.coverMediaId,
           privacy: (dto.privacy ?? 'public').toUpperCase() as any,
           createdBy: userId,
           memberCount: 1,
@@ -126,7 +144,7 @@ export class GroupsService {
       data: {
         ...(dto.name && { name: dto.name }),
         ...(dto.description !== undefined && { description: dto.description }),
-        ...(dto.coverUrl !== undefined && { coverUrl: dto.coverUrl }),
+        ...(dto.coverMediaId !== undefined && { coverMediaId: dto.coverMediaId }),
         ...(dto.privacy && { privacy: dto.privacy.toUpperCase() as any }),
       },
     });
@@ -202,7 +220,7 @@ export class GroupsService {
     return {
       statusCode: 200,
       data: members.map((m) => ({
-        user: { id: m.user.userId, username: m.user.username, displayName: m.user.displayName, avatarUrl: m.user.avatarUrl, isVerified: m.user.isVerified },
+        user: { id: m.user.userId, username: m.user.username, displayName: m.user.displayName, avatarMediaId: m.user.avatarMediaId, isVerified: m.user.isVerified },
         role: m.role.toLowerCase(),
         joinedAt: m.joinedAt,
       })),
@@ -281,7 +299,7 @@ export class GroupsService {
     return {
       statusCode: 200,
       data: requests.map((m) => ({
-        id: m.user.userId, username: m.user.username, displayName: m.user.displayName, avatarUrl: m.user.avatarUrl,
+        id: m.user.userId, username: m.user.username, displayName: m.user.displayName, avatarMediaId: m.user.avatarMediaId,
       })),
       meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
@@ -336,10 +354,10 @@ export class GroupsService {
       statusCode: 200,
       data: posts.map((p) => ({
         id: p.id,
-        author: { id: p.author.userId, username: p.author.username, displayName: p.author.displayName, avatarUrl: p.author.avatarUrl },
+        author: { id: p.author.userId, username: p.author.username, displayName: p.author.displayName, avatarMediaId: p.author.avatarMediaId },
         type: p.type.toLowerCase(),
         content: p.content,
-        mediaUrls: p.mediaUrls,
+        mediaIds: p.mediaIds,
         likeCount: p.likeCount,
         commentCount: p.commentCount,
         createdAt: p.createdAt,

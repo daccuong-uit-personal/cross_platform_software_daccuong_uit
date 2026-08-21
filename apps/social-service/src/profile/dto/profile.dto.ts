@@ -34,7 +34,12 @@ export class UpdateProfileDto {
   bio?: string;
 
   @ApiPropertyOptional({ example: 'https://example.com/avatar.jpg' })
+  @IsString()
   @IsOptional()
-  @IsUrl()
-  avatarUrl?: string;
+  avatarMediaId?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  coverMediaId?: string;
 }

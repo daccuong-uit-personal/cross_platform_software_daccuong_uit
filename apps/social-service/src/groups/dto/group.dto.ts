@@ -21,7 +21,7 @@ export class CreateGroupDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  coverUrl?: string;
+  coverMediaId?: string;
 
   @ApiPropertyOptional({ enum: GroupPrivacy, default: GroupPrivacy.PUBLIC })
   @IsOptional()
@@ -45,7 +45,7 @@ export class UpdateGroupDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  coverUrl?: string;
+  coverMediaId?: string;
 
   @ApiPropertyOptional({ enum: GroupPrivacy })
   @IsOptional()

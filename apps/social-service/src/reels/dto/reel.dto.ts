@@ -37,14 +37,14 @@ export class CreateReelDto {
   mediaId?: string;
 
   @ApiPropertyOptional()
-  @IsOptional()
   @IsString()
-  videoUrl?: string;
+  @IsOptional()
+  videoMediaId?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty({ required: false })
   @IsString()
-  thumbnailUrl?: string;
+  @IsOptional()
+  thumbnailMediaId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

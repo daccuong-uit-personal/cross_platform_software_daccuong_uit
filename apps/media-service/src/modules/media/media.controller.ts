@@ -57,107 +57,6 @@ export class MediaController {
     };
   }
 
-  @Post('upload')
-  @ApiOperation({ summary: 'Upload a media file' })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
-        },
-        userId: {
-          type: 'string',
-        },
-      },
-    },
-  })
-  @UseInterceptors(FileInterceptor('file'))
-  async upload(
-    @UploadedFile() file: Express.Multer.File,
-    @Body('userId') userIdFromBody: string,
-    @Headers('x-user-id') userIdFromHeader: string,
-    @Req() req: any,
-  ) {
-    const userId = userIdFromHeader || userIdFromBody || req.user?.id || '00000000-0000-0000-0000-000000000000';
-    const media = await this.mediaService.createMedia(userId, file);
-    return {
-      id: media.id,
-      fileName: media.file_name,
-      originalName: media.original_name,
-      mimeType: media.mime_type,
-      fileSize: media.file_size.toString(),
-      status: media.status,
-      createdAt: media.created_at,
-    };
-  }
-
-  @Post('upload-base64')
-  @ApiOperation({ summary: 'Upload a media file via Base64' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        base64: { type: 'string' },
-        originalName: { type: 'string' },
-        userId: { type: 'string' },
-      },
-    },
-  })
-  async uploadBase64(
-    @Body() body: { base64: string, originalName: string, userId?: string },
-    @Headers('x-user-id') userIdFromHeader: string,
-    @Req() req: any,
-  ) {
-    const userId = userIdFromHeader || body.userId || req.user?.id || '00000000-0000-0000-0000-000000000000';
-    const media = await this.mediaService.uploadBase64(userId, body.base64, body.originalName);
-    return {
-      id: media.id,
-      fileName: media.file_name,
-      originalName: media.original_name,
-      mimeType: media.mime_type,
-      fileSize: media.file_size.toString(),
-      status: media.status,
-      createdAt: media.created_at,
-    };
-  }
-
-  @Post('upload-stream')
-  @ApiOperation({ 
-    summary: 'Upload a media file via stream',
-    description: 'Directly pipe the binary file content in the request body. Requires specific headers.'
-  })
-  @ApiHeader({ name: 'x-original-name', description: 'Original file name with extension', required: true })
-  @ApiHeader({ name: 'x-user-id', description: 'ID of the user uploading the file', required: false })
-  @ApiBody({ schema: { type: 'string', format: 'binary' }, description: 'Binary file content' })
-  @ApiResponse({ status: 201, description: 'Media uploaded and queued for processing' })
-  async uploadStream(
-    @Req() req: any,
-    @Headers('x-user-id') userIdFromHeader: string,
-    @Headers('x-original-name') originalName: string,
-    @Headers('content-type') mimeType: string,
-    @Headers('content-length') contentLength: string,
-  ) {
-    const userId = userIdFromHeader || req.user?.id || '00000000-0000-0000-0000-000000000000';
-    const media = await this.mediaService.createMediaFromStream(
-      userId,
-      req,
-      originalName || 'unnamed_file',
-      mimeType || 'application/octet-stream',
-      contentLength ? parseInt(contentLength) : undefined,
-    );
-    return {
-      id: media.id,
-      fileName: media.file_name,
-      originalName: media.original_name,
-      mimeType: media.mime_type,
-      fileSize: media.file_size.toString(),
-      status: media.status,
-      createdAt: media.created_at,
-    };
-  }
 
   @Get()
   @ApiOperation({ summary: 'List media items' })
@@ -234,134 +133,22 @@ export class MediaController {
     };
   }
 
-  @Get(':id/base64')
-  @ApiOperation({ summary: 'Get media as Base64 data URI' })
-  @ApiResponse({ status: 200, description: 'Returns base64 data URI' })
-  async getBase64(@Param('id', ParseUUIDPipe) id: string) {
-    const media = await this.mediaService.getMedia(id);
-    const buffer = await this.mediaService['storage'].getFile(media.storage_path);
-    return {
-      dataUri: `data:${media.mime_type};base64,${buffer.toString('base64')}`,
-      mimeType: media.mime_type,
-      fileName: media.original_name,
-    };
-  }
-
-  @Get(':id/thumbnail')
-  @ApiOperation({ summary: 'Get media thumbnail' })
-  async getThumbnail(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
-    const media = await this.mediaService.getMedia(id);
-    const metadata = media.metadata as any;
-    const thumbPath = metadata?.thumbnail;
-    
-    if (!thumbPath) {
-      return res.status(404).send('Thumbnail not ready or not available');
-    }
-    
-    const { stream } = await this.mediaService.getMediaStreamByIdentifier(thumbPath);
-    res.setHeader('Content-Type', 'image/webp');
-    stream.pipe(res);
-  }
-
-  @Get(':id/info')
-  @ApiOperation({ summary: 'Get detailed media info (metadata)' })
-  async getInfo(@Param('id', ParseUUIDPipe) id: string) {
-    const media = await this.mediaService.getMedia(id);
-    return {
-      ...media,
-      fileSize: media.file_size.toString(),
-      metadata: media.metadata,
-    };
-  }
-
-  @Get(':id/download')
-  @ApiOperation({ summary: 'Get a presigned download URL' })
-  @ApiResponse({ status: 200, description: 'Returns a temporary download link' })
-  async getDownloadUrl(@Param('id', ParseUUIDPipe) id: string) {
-    const url = await this.mediaService.getDownloadUrl(id);
-    return { url };
-  }
-
-  @Get(':id/stream')
-  @ApiOperation({ summary: 'Stream media file with HTTP Range support' })
-  @ApiHeader({ name: 'Range', description: 'Byte range (e.g. bytes=0-1023)', required: false })
-  @ApiResponse({ status: 200, description: 'Full stream (no Range header)' })
-  @ApiResponse({ status: 206, description: 'Partial content (Range request satisfied)' })
-  @ApiResponse({ status: 416, description: 'Range Not Satisfiable' })
-  async streamFile(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Headers('range') rangeHeader: string | undefined,
-    @Res() res: Response,
-  ) {
-    // ── 416 guard: if range header exists but is malformed / unsatisfiable ──
-    let result: Awaited<ReturnType<typeof this.mediaService.getMediaStreamRange>>;
-    try {
-      result = await this.mediaService.getMediaStreamRange(id, rangeHeader);
-    } catch (err: any) {
-      if (err.status === 416) {
-        // Must return Content-Range: bytes */totalSize on 416
-        // We need to fetch just the size – use getMedia which throws 404 if missing
-        try {
-          const meta = await this.mediaService.getMedia(id);
-          const total = Number(meta.file_size);
-          res.setHeader('Content-Range', `bytes */${total}`);
-        } catch {
-          // Media not found at all
-        }
-        return res.status(416).end();
-      }
-      throw err; // propagate 404 / 500 etc.
-    }
-
-    const { stream, mimeType, originalName, totalSize, start, end, chunkSize, isPartial } = result;
-
-    // ── Common headers ────────────────────────────────────────────────────────
-    res.setHeader('Content-Type', mimeType);
-    res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Content-Disposition', `inline; filename="${originalName}"`);
-
-    if (isPartial) {
-      // 206 Partial Content
-      res.setHeader('Content-Range', `bytes ${start}-${end}/${totalSize}`);
-      res.setHeader('Content-Length', chunkSize);
-      res.status(206);
-    } else {
-      // 200 OK – full file
-      res.setHeader('Content-Length', totalSize);
-      res.status(200);
-    }
-
-    stream.pipe(res);
+  @Get(':id/access')
+  @ApiOperation({ summary: 'Get direct access URLs (presigned) for media' })
+  @ApiResponse({ status: 200, description: 'Returns access URLs' })
+  async getAccessUrls(@Param('id', ParseUUIDPipe) id: string) {
+    return this.mediaService.getAccessUrls(id);
   }
 
 
   @Get(':id/hls/index.m3u8')
-  @ApiOperation({ summary: 'Get HLS playlist' })
+  @ApiOperation({ summary: 'Get HLS playlist with rewritten presigned segment URLs' })
   @ApiResponse({ status: 200, description: 'M3U8 playlist for HLS streaming' })
   @ApiResponse({ status: 404, description: 'HLS not available for this media' })
   async getHlsPlaylist(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
-    const media = await this.mediaService.getMedia(id);
-    if (!media.metadata || !(media.metadata as any).hls_path) {
-      return res.status(404).send('HLS not ready or not supported for this media');
-    }
-    const { stream } = await this.mediaService.getMediaStreamByIdentifier((media.metadata as any).hls_path);
+    const playlistText = await this.mediaService.getRewrittenHlsPlaylist(id);
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-    stream.pipe(res);
-  }
-
-  @Get(':id/hls/:segment')
-  @ApiOperation({ summary: 'Get HLS segment' })
-  @ApiResponse({ status: 200, description: 'TS segment for HLS streaming' })
-  async getHlsSegment(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('segment') segment: string,
-    @Res() res: Response,
-  ) {
-    const media = await this.mediaService.getMedia(id);
-    const segmentPath = `hls/${id}/${segment}`;
-    const { stream } = await this.mediaService.getMediaStreamByIdentifier(segmentPath);
-    res.setHeader('Content-Type', 'video/MP2T');
-    stream.pipe(res);
+    res.send(playlistText);
   }
 
   @Delete(':id')
@@ -381,14 +168,16 @@ export class MediaController {
       properties: {
         status: { type: 'string', enum: ['pending', 'processing', 'ready', 'failed'] },
         metadata: { type: 'object' },
-        thumbnail_path: { type: 'string' }
+        thumbnail_path: { type: 'string' },
+        storage_path: { type: 'string' },
+        fallback_url: { type: 'string' },
       },
     },
   })
   async updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { status: string; metadata?: any; thumbnail_path?: string },
+    @Body() body: { status: string; metadata?: any; thumbnail_path?: string; storage_path?: string; fallback_url?: string },
   ) {
-    return this.mediaService.updateStatus(id, body.status, body.metadata, body.thumbnail_path);
+    return this.mediaService.updateStatus(id, body.status, body.metadata, body.thumbnail_path, body.storage_path, body.fallback_url);
   }
 }

@@ -18,6 +18,7 @@ model Media {
   user_id       String   @map("user_id") @db.Uuid
   status        String   @default("pending") @map("status")
   thumbnail_path String?  @map("thumbnail_path")
+  fallback_url   String?  @map("fallback_url")
   metadata      Json?    @map("metadata")
   created_at    DateTime @default(now()) @map("created_at")
   updated_at    DateTime @updatedAt @map("updated_at")

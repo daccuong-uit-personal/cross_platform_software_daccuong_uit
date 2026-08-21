@@ -140,10 +140,8 @@ services:
       dockerfile: apps/media-worker/Dockerfile
     env_file: ../../.env
     environment:
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_password}@redis:6379
       MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: ${MINIO_BUCKET:-media}
       MEDIA_SERVICE_URL: http://host.docker.internal:3003
     restart: unless-stopped

@@ -17,6 +17,7 @@ import {
   DiscoverQueryDto,
 } from './dto/post.dto';
 import { PostLikeCacheService } from './post-like-cache.service';
+import { MediaResolverService } from '../common/services/media-resolver.service';
 
 const logger = createLogger({ service: 'social-service:posts' });
 
@@ -26,7 +27,8 @@ export class PostsService {
     private readonly prisma: PrismaService,
     private readonly eventBus: EventBusService,
     private readonly postLikeCache: PostLikeCacheService,
-  ) {}
+    private readonly mediaResolver: MediaResolverService,
+  ) { }
 
   // ── Helpers ───────────────────────────────────────────────
   private buildPagination(page: number, pageSize: number, totalItems: number) {
@@ -40,12 +42,14 @@ export class PostsService {
     };
   }
 
-  private mapAuthor(u: any) {
+  private mapAuthor(u: any, urlMap: Record<string, any> = {}) {
+    const avatarUrls = u.avatarMediaId ? urlMap[u.avatarMediaId]?.data : null;
     return {
       id: u.userId,
       username: u.username,
       displayName: u.displayName,
-      avatarUrl: u.avatarUrl,
+      avatarMediaId: u.avatarMediaId,
+      avatarUrl: avatarUrls?.thumbnail || avatarUrls?.original || null,
       isVerified: u.isVerified,
       isPrivate: u.isPrivate,
     };
@@ -101,7 +105,7 @@ export class PostsService {
     return results.filter(Boolean);
   }
 
-  private mapPost(post: any, currentUserId?: string) {
+  private mapPost(post: any, currentUserId?: string, urlMap: Record<string, any> = {}) {
     const likes = post.likes ?? [];
     const isLiked = currentUserId
       ? likes.some((like: any) => like.userId === currentUserId)
@@ -113,25 +117,31 @@ export class PostsService {
 
     const likeCount = Array.isArray(likes) ? likes.length : Number(post.likeCount ?? 0);
 
+    // Resolve media URLs for post media items
+    const mediaUrls: string[] = (post.mediaIds ?? [])
+      .map((id: string) => urlMap[id]?.data?.original)
+      .filter(Boolean);
+
     const mapped = {
       id: post.id,
-      author: post.author ? this.mapAuthor(post.author) : null,
+      author: post.author ? this.mapAuthor(post.author, urlMap) : null,
       type: post.type.toLowerCase(),
       content: post.content,
-      mediaUrls: post.mediaUrls,
+      mediaIds: post.mediaIds,
+      mediaUrls,
       hashtags: post.hashtags,
       poll: post.poll
         ? {
-            id: post.poll.id,
-            question: post.poll.question,
-            options: post.poll.options.map((o: any) => ({
-              id: o.id,
-              text: o.text,
-              voteCount: o.voteCount,
-            })),
-            totalVotes: post.poll.totalVotes,
-            endsAt: post.poll.endsAt,
-          }
+          id: post.poll.id,
+          question: post.poll.question,
+          options: post.poll.options.map((o: any) => ({
+            id: o.id,
+            text: o.text,
+            voteCount: o.voteCount,
+          })),
+          totalVotes: post.poll.totalVotes,
+          endsAt: post.poll.endsAt,
+        }
         : null,
       groupId: post.groupId,
       likeCount,
@@ -139,17 +149,31 @@ export class PostsService {
       shareCount: post.shareCount,
       isLikedByCurrentUser: isLiked,
       isBookmarkedByCurrentUser: isBookmarked,
-      isRepostedByCurrentUser: false, // extend later
+      isRepostedByCurrentUser: false,
       visibility: post.visibility.toLowerCase(),
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
     };
 
     if (post.originalPost && !post.originalPost.isDeleted) {
-      (mapped as any).originalPost = this.mapPost(post.originalPost, currentUserId);
+      (mapped as any).originalPost = this.mapPost(post.originalPost, currentUserId, urlMap);
     }
 
     return mapped;
+  }
+
+  /** Collect unique mediaIds from posts (post media + author avatars) */
+  private collectPostMediaIds(posts: any[]): string[] {
+    const ids = new Set<string>();
+    for (const p of posts) {
+      for (const id of (p.mediaIds ?? [])) ids.add(id);
+      if (p.author?.avatarMediaId) ids.add(p.author.avatarMediaId);
+      if (p.originalPost) {
+        for (const id of (p.originalPost.mediaIds ?? [])) ids.add(id);
+        if (p.originalPost.author?.avatarMediaId) ids.add(p.originalPost.author.avatarMediaId);
+      }
+    }
+    return [...ids];
   }
 
   private async syncLikeCount(postId: string, tx?: any): Promise<number> {
@@ -248,10 +272,10 @@ export class PostsService {
 
     const visiblePosts = await this.filterVisiblePosts(posts, userId, userId);
     await this.hydrateLikeCounts(visiblePosts);
-
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectPostMediaIds(visiblePosts));
     return {
       statusCode: 200,
-      data: visiblePosts.map((p) => this.mapPost(p, userId)),
+      data: visiblePosts.map((p) => this.mapPost(p, userId, urlMap)),
       meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
@@ -280,10 +304,11 @@ export class PostsService {
     ]);
 
     await this.hydrateLikeCounts(posts);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectPostMediaIds(posts));
 
     return {
       statusCode: 200,
-      data: posts.map((p) => this.mapPost(p, currentUserId)),
+      data: posts.map((p) => this.mapPost(p, currentUserId, urlMap)),
       meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
@@ -311,9 +336,10 @@ export class PostsService {
     ]);
 
     await this.hydrateLikeCounts(posts);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectPostMediaIds(posts));
 
     return {
-      data: posts.map((p) => this.mapPost(p, currentUserId)),
+      data: posts.map((p) => this.mapPost(p, currentUserId, urlMap)),
       meta: { pagination: this.buildPagination(page, pageSize, total) },
     };
   }
@@ -336,7 +362,7 @@ export class PostsService {
           authorId,
           type: (dto.type ?? 'text').toUpperCase() as any,
           content: dto.content,
-          mediaUrls: dto.mediaUrls ?? [],
+          mediaIds: dto.mediaIds ?? [],
           hashtags: [...new Set([...this.extractHashtags(dto.content), ...(dto.hashtags || [])])],
           visibility: (dto.visibility ?? 'public').toUpperCase() as any,
           groupId: dto.groupId ?? null,
@@ -384,7 +410,8 @@ export class PostsService {
       include: this.postInclude,
     });
 
-    return this.mapPost(fullPost!, authorId);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectPostMediaIds([fullPost!]));
+    return this.mapPost(fullPost!, authorId, urlMap);
   }
 
   // ── Get Post By ID ────────────────────────────────────────
@@ -406,7 +433,8 @@ export class PostsService {
     }
 
     await this.hydrateLikeCounts([post]);
-    return this.mapPost(post, currentUserId);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectPostMediaIds([post]));
+    return this.mapPost(post, currentUserId, urlMap);
   }
 
   // ── Update Post ───────────────────────────────────────────
@@ -436,7 +464,8 @@ export class PostsService {
       include: this.postInclude,
     });
 
-    return this.mapPost(updated, authorId);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectPostMediaIds([updated]));
+    return this.mapPost(updated, authorId, urlMap);
   }
 
   // ── Delete Post ───────────────────────────────────────────

@@ -136,10 +136,12 @@ export class StorageService implements OnModuleInit {
 
   async getPresignedPutUrl(fileName: string, mimeType: string, expiry: number = 3600) {
     try {
-      // Must enforce Content-Type to prevent arbitrary file uploads
-      return await this.minioClient.presignedUrl('PUT', appConfig.MINIO_BUCKET, fileName, expiry, {
-        'Content-Type': mimeType
-      });
+      // Dùng presignedPutObject của MinIO SDK
+      return await this.minioClient.presignedPutObject(
+        appConfig.MINIO_BUCKET,
+        fileName,
+        expiry
+      );
     } catch (error: any) {
       logger.error(`Error generating presigned PUT URL: ${error.message}`);
       throw new InternalServerErrorException('Failed to generate upload URL');

@@ -42,7 +42,7 @@ export class CreateNovelDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  coverUrl?: string;
+  coverMediaId?: string;
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
@@ -83,7 +83,7 @@ export class UpdateNovelDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  coverUrl?: string;
+  coverMediaId?: string;
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()

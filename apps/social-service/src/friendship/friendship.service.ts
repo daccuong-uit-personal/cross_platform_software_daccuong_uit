@@ -84,7 +84,7 @@ export class FriendshipService {
       id: u.userId ?? u.id,
       name: u.displayName ?? u.username ?? u.name ?? 'Unknown',
       username: u.username ?? undefined,
-      avatar: u.avatarUrl ?? u.avatar ?? null,
+      avatar: u.avatarMediaId ?? u.avatar ?? null,
       mutualFriends,
       relationshipDate,
       status,

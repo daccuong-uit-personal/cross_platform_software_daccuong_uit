@@ -11,6 +11,6 @@ WORKDIR /app
 COPY apps/media-worker/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY apps/media-worker/ .
 
 CMD ["python", "main.py"]

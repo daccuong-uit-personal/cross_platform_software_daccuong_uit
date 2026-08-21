@@ -38,7 +38,7 @@ export class SearchService {
         this.prisma.userProfile.findMany({
           where: { OR: [{ displayName: { contains: q, mode: 'insensitive' } }, { username: { contains: q, mode: 'insensitive' } }] },
           skip: currentSkip, take: currentTake,
-          select: { userId: true, username: true, displayName: true, avatarUrl: true, followerCount: true },
+          select: { userId: true, username: true, displayName: true, avatarMediaId: true, followerCount: true },
         }),
       ]);
       results.users = users;
@@ -64,7 +64,7 @@ export class SearchService {
         this.prisma.reel.findMany({
           where: { content: { contains: q, mode: 'insensitive' }, isDeleted: false, visibility: 'PUBLIC' },
           skip: currentSkip, take: currentTake, orderBy: { createdAt: 'desc' },
-          select: { id: true, content: true, videoUrl: true, author: { select: { userId: true, username: true } } },
+          select: { id: true, content: true, videoMediaId: true, author: { select: { userId: true, username: true } } },
         }),
       ]);
       results.reels = reels;
@@ -77,7 +77,7 @@ export class SearchService {
         this.prisma.video.findMany({
           where: { OR: [{ title: { contains: q, mode: 'insensitive' } }, { description: { contains: q, mode: 'insensitive' } }], isDeleted: false, visibility: 'PUBLIC' },
           skip: currentSkip, take: currentTake, orderBy: { viewCount: 'desc' },
-          select: { id: true, title: true, videoUrl: true, author: { select: { userId: true, username: true } } },
+          select: { id: true, title: true, videoMediaId: true, author: { select: { userId: true, username: true } } },
         }),
       ]);
       results.videos = videos;
@@ -90,7 +90,7 @@ export class SearchService {
         this.prisma.novel.findMany({
           where: { title: { contains: q, mode: 'insensitive' }, visibility: 'PUBLIC' },
           skip: currentSkip, take: currentTake, orderBy: { averageRating: 'desc' },
-          select: { id: true, title: true, coverUrl: true, author: { select: { userId: true, username: true } } },
+          select: { id: true, title: true, coverMediaId: true, author: { select: { userId: true, username: true } } },
         }),
       ]);
       results.novels = novels;
@@ -103,7 +103,7 @@ export class SearchService {
         this.prisma.group.findMany({
           where: { name: { contains: q, mode: 'insensitive' }, privacy: 'PUBLIC' },
           skip: currentSkip, take: currentTake, orderBy: { memberCount: 'desc' },
-          select: { id: true, name: true, coverUrl: true, memberCount: true },
+          select: { id: true, name: true, coverMediaId: true, memberCount: true },
         }),
       ]);
       results.groups = groups;

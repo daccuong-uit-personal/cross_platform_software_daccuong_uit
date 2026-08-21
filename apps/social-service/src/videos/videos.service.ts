@@ -16,11 +16,16 @@ import {
   PaginationQueryDto,
 } from './dto/video.dto';
 
+import { MediaResolverService } from '../common/services/media-resolver.service';
+
 const logger = createLogger({ service: 'social-service:videos' });
 
 @Injectable()
 export class VideosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mediaResolver: MediaResolverService,
+  ) {}
 
   private buildPagination(page: number, pageSize: number, totalItems: number) {
     return {
@@ -32,17 +37,19 @@ export class VideosService {
     };
   }
 
-  private mapAuthor(u: any) {
+  private mapAuthor(u: any, urlMap: Record<string, any> = {}) {
+    const avatarUrls = u.avatarMediaId ? urlMap[u.avatarMediaId]?.data : null;
     return {
       id: u.userId,
       username: u.username,
       displayName: u.displayName,
-      avatarUrl: u.avatarUrl,
+      avatarMediaId: u.avatarMediaId,
+      avatarUrl: avatarUrls?.thumbnail || avatarUrls?.original || null,
       isVerified: u.isVerified,
     };
   }
 
-  private mapVideo(video: any, currentUserId?: string) {
+  private mapVideo(video: any, currentUserId?: string, urlMap: Record<string, any> = {}) {
     const isLiked = currentUserId
       ? (video.reactions ?? []).some(
           (r: any) => r.userId === currentUserId && r.type === 'LIKE',
@@ -53,12 +60,17 @@ export class VideosService {
       ? (video.bookmarks ?? []).some((b: any) => b.userId === currentUserId)
       : false;
 
+    const videoUrls = video.videoMediaId ? urlMap[video.videoMediaId]?.data : null;
+    const thumbUrls = video.thumbnailMediaId ? urlMap[video.thumbnailMediaId]?.data : null;
+
     return {
       id: video.id,
       title: video.title,
       description: video.description,
-      videoUrl: video.videoUrl,
-      thumbnailUrl: video.thumbnailUrl,
+      videoMediaId: video.videoMediaId,
+      thumbnailMediaId: video.thumbnailMediaId,
+      videoUrl: videoUrls?.hls || videoUrls?.original || null,
+      thumbnailUrl: thumbUrls?.thumbnail || thumbUrls?.original || null,
       duration: video.duration,
       hashtags: video.hashtags,
       likeCount: video.likeCount,
@@ -67,10 +79,20 @@ export class VideosService {
       viewCount: video.viewCount,
       visibility: video.visibility.toLowerCase(),
       createdAt: video.createdAt,
-      author: video.author ? this.mapAuthor(video.author) : null,
+      author: video.author ? this.mapAuthor(video.author, urlMap) : null,
       isLikedByCurrentUser: isLiked,
       isBookmarkedByCurrentUser: isBookmarked,
     };
+  }
+
+  private collectVideoMediaIds(videos: any[]): string[] {
+    const ids = new Set<string>();
+    for (const v of videos) {
+      if (v.videoMediaId) ids.add(v.videoMediaId);
+      if (v.thumbnailMediaId && v.thumbnailMediaId !== v.videoMediaId) ids.add(v.thumbnailMediaId);
+      if (v.author?.avatarMediaId) ids.add(v.author.avatarMediaId);
+    }
+    return [...ids];
   }
 
   private readonly videoInclude = {
@@ -98,8 +120,9 @@ export class VideosService {
       }),
     ]);
 
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectVideoMediaIds(videos));
     return {
-      data: videos.map((v) => this.mapVideo(v, currentUserId)),
+      data: videos.map((v) => this.mapVideo(v, currentUserId, urlMap)),
       meta: { pagination: this.buildPagination(page, pageSize, total) },
     };
   }
@@ -111,15 +134,16 @@ export class VideosService {
         authorId,
         title: dto.title,
         description: dto.description,
-        videoUrl: dto.videoUrl,
-        thumbnailUrl: dto.thumbnailUrl,
+        videoMediaId: dto.videoMediaId,
+        thumbnailMediaId: dto.thumbnailMediaId,
         duration: dto.duration,
         hashtags: this.extractHashtags(dto.title + ' ' + (dto.description ?? '')),
         visibility: (dto.visibility ?? 'PUBLIC').toUpperCase() as any,
       },
       include: this.videoInclude,
     });
-    return this.mapVideo(video, authorId);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectVideoMediaIds([video]));
+    return this.mapVideo(video, authorId, urlMap);
   }
 
   async getVideoById(videoId: string, currentUserId?: string) {
@@ -133,7 +157,8 @@ export class VideosService {
     // Fire and forget view increment
     this.incrementView(videoId).catch(err => logger.error(`View increment fail: ${videoId}`, err));
 
-    return this.mapVideo(video, currentUserId);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectVideoMediaIds([video]));
+    return this.mapVideo(video, currentUserId, urlMap);
   }
 
   async updateVideo(videoId: string, authorId: string, dto: UpdateVideoDto) {
@@ -146,7 +171,7 @@ export class VideosService {
       data: {
         ...(dto.title && { title: dto.title }),
         ...(dto.description !== undefined && { description: dto.description }),
-        ...(dto.thumbnailUrl !== undefined && { thumbnailUrl: dto.thumbnailUrl }),
+        ...(dto.thumbnailMediaId !== undefined && { thumbnailMediaId: dto.thumbnailMediaId }),
         ...(dto.visibility && { visibility: dto.visibility.toUpperCase() as any }),
       },
       include: this.videoInclude,
@@ -159,7 +184,8 @@ export class VideosService {
       updated.hashtags = hashtags;
     }
 
-    return this.mapVideo(updated, authorId);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectVideoMediaIds([updated]));
+    return this.mapVideo(updated, authorId, urlMap);
   }
 
   async deleteVideo(videoId: string, authorId: string) {
@@ -227,16 +253,17 @@ export class VideosService {
       throw new ForbiddenException('Không có quyền xem playlist này');
     }
 
+    const allVideos = playlist.items.filter(item => !item.video.isDeleted).map(i => i.video);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectVideoMediaIds([...allVideos, playlist.author ? { author: playlist.author } : {}]));
+
     return {
       id: playlist.id,
       name: playlist.name,
       description: playlist.description,
       visibility: playlist.visibility.toLowerCase(),
       itemCount: playlist.itemCount,
-      author: this.mapAuthor(playlist.author),
-      videos: playlist.items
-        .filter(item => !item.video.isDeleted)
-        .map(item => this.mapVideo(item.video, currentUserId)),
+      author: this.mapAuthor(playlist.author, urlMap),
+      videos: allVideos.map(video => this.mapVideo(video, currentUserId, urlMap)),
     };
   }
 
@@ -331,6 +358,9 @@ export class VideosService {
       }),
     ]);
 
+    const allVideos = histories.filter(h => !h.video.isDeleted).map(h => h.video);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectVideoMediaIds(allVideos));
+
     return {
       statusCode: 200,
       data: histories
@@ -339,7 +369,7 @@ export class VideosService {
           progressSeconds: h.progressSeconds,
           isFinished: h.isFinished,
           lastWatchedAt: h.lastWatchedAt,
-          video: this.mapVideo(h.video, userId),
+          video: this.mapVideo(h.video, userId, urlMap),
         })),
       meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };

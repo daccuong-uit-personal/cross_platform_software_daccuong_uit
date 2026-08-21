@@ -20,8 +20,8 @@ model UserProfile {
   username           String    @unique
   displayName        String?   @map("display_name")
   bio                String?
-  avatarUrl          String?   @map("avatar_url")
-  coverUrl           String?   @map("cover_url")
+  avatarMediaId      String?   @map("avatar_media_id")
+  coverMediaId       String?   @map("cover_media_id")
   website            String?
   location           String?
   hometown           String?
@@ -189,7 +189,7 @@ model Group {
   id          String       @id @default(uuid())
   name        String
   description String?
-  coverUrl    String?      @map("cover_url")
+  coverMediaId String?      @map("cover_media_id")
   privacy     GroupPrivacy @default(PUBLIC)
   memberCount Int          @default(0) @map("member_count")
   postCount   Int          @default(0) @map("post_count")
@@ -242,7 +242,7 @@ model Post {
   authorId       String         @map("author_id")
   type           PostType       @default(TEXT)
   content        String
-  mediaUrls      String[]       @map("media_urls")
+  mediaIds       String[]       @map("media_ids")
   hashtags       String[]
   visibility     PostVisibility @default(PUBLIC)
   groupId        String?        @map("group_id")
@@ -507,8 +507,8 @@ model Reel {
   id             String         @id @default(uuid())
   authorId       String         @map("author_id")
   content        String
-  videoUrl       String         @map("video_url")
-  thumbnailUrl   String?        @map("thumbnail_url")
+  videoMediaId   String         @map("video_media_id")
+  thumbnailMediaId String?      @map("thumbnail_media_id")
   duration       Int?           @map("duration") // in seconds
   hashtags       String[]
   musicId        String?        @map("music_id")
@@ -548,8 +548,8 @@ model Video {
   authorId       String          @map("author_id")
   title          String
   description    String?
-  videoUrl       String          @map("video_url")
-  thumbnailUrl   String?         @map("thumbnail_url")
+  videoMediaId   String          @map("video_media_id")
+  thumbnailMediaId String?       @map("thumbnail_media_id")
   duration       Int?            @map("duration") // in seconds
   hashtags       String[]
   visibility     VideoVisibility @default(PUBLIC)
@@ -635,7 +635,7 @@ model Novel {
   authorId      String          @map("author_id")
   title         String
   synopsis      String?
-  coverUrl      String?         @map("cover_url")
+  coverMediaId  String?         @map("cover_media_id")
   genres        String[]
   tags          String[]
   status        NovelStatus     @default(ONGOING)

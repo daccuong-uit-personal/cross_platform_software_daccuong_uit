@@ -10,12 +10,16 @@ import {
   UpdatePrivacySettingsDto,
   UpdateAccountSettingsDto,
 } from './dto/user.dto';
+import { MediaResolverService } from '../common/services/media-resolver.service';
 
 const logger = createLogger({ service: 'social-service:users' });
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mediaResolver: MediaResolverService,
+  ) {}
 
   // ── User Creation (Internal - called from event listener) ─
   async createUserProfile(data: {
@@ -94,13 +98,15 @@ export class UsersService {
     };
   }
 
-  private mapProfile(u: any) {
+  private mapProfile(u: any, urlMap: Record<string, any> = {}) {
+    const avatarUrls = u.avatarMediaId ? urlMap[u.avatarMediaId]?.data : null;
     return {
       id: u.userId,
       username: u.username,
       displayName: u.displayName,
-      avatarUrl: u.avatarUrl,
-      coverUrl: u.coverUrl,
+      avatarMediaId: u.avatarMediaId,
+      avatarUrl: avatarUrls?.thumbnail || avatarUrls?.original || null,
+      coverMediaId: u.coverMediaId,
       bio: u.bio,
       website: u.website,
       location: u.location,
@@ -115,6 +121,14 @@ export class UsersService {
       postCount: u.postCount,
       createdAt: u.createdAt,
     };
+  }
+
+  private collectUserMediaIds(users: any[]): string[] {
+    const ids = new Set<string>();
+    for (const u of users) {
+      if (u.avatarMediaId) ids.add(u.avatarMediaId);
+    }
+    return [...ids];
   }
 
   // ── Suggestions ──────────────────────────────────────────
@@ -138,9 +152,11 @@ export class UsersService {
       orderBy: { followerCount: 'desc' },
     });
 
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectUserMediaIds(users));
+
     return {
       statusCode: 200,
-      data: users.map((u: any) => this.mapProfile(u)),
+      data: users.map((u: any) => this.mapProfile(u, urlMap)),
       meta: { timestamp: new Date().toISOString() },
     };
   }
@@ -186,10 +202,12 @@ export class UsersService {
       }),
     ]);
 
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectUserMediaIds(blocked.map(b => b.blocked)));
+
     return {
       statusCode: 200,
       data: blocked.map((b) => ({
-        ...this.mapProfile(b.blocked),
+        ...this.mapProfile(b.blocked, urlMap),
         status: 'blocked',
         relationshipDate: b.createdAt,
         menuItems: getMenuItemsForContext('blocked'),
@@ -261,10 +279,12 @@ export class UsersService {
     const friendSet = new Set(friendships.map(f => f.initiatorId === userId ? f.receiverId : f.initiatorId));
     const blockSet = new Set(blocks.map(b => b.blockedId));
 
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectUserMediaIds(muted.map(m => m.muted)));
+
     return {
       statusCode: 200,
       data: muted.map((m) => ({
-        ...this.mapProfile(m.muted),
+        ...this.mapProfile(m.muted, urlMap),
         status: 'muted',
         relationshipDate: m.createdAt,
         menuItems: getMenuItemsForContext('muted', { isFriend: friendSet.has(m.mutedId), isBlocked: blockSet.has(m.mutedId) }),

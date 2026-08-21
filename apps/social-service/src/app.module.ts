@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { EventModule } from './events/event.module';
+import { MediaResolverModule } from './common/modules/media-resolver.module';
 
 // Phase 2 — Social Core
 import { UsersModule } from './users/users.module';
@@ -30,6 +31,7 @@ import { ProfileModule } from './profile/profile.module';
     PrismaModule,
     HealthModule,
     EventModule,
+    MediaResolverModule, // Global — provides MediaResolverService to all modules
 
     // Social Phase 2 modules
     UsersModule,

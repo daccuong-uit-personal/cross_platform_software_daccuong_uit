@@ -13,12 +13,17 @@ import {
   FeedQueryDto,
   DiscoverReelsQueryDto,
 } from './dto/reel.dto';
+import { MediaResolverService } from '../common/services/media-resolver.service';
+import { console } from 'inspector';
 
 const logger = createLogger({ service: 'social-service:reels' });
 
 @Injectable()
 export class ReelsService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mediaResolver: MediaResolverService,
+  ) { }
 
   // ── Helpers ───────────────────────────────────────────────
   private buildPagination(page: number, pageSize: number, totalItems: number) {
@@ -32,18 +37,20 @@ export class ReelsService {
     };
   }
 
-  private mapAuthor(u: any) {
+  private mapAuthor(u: any, urlMap: Record<string, any> = {}) {
+    const avatarUrls = u.avatarMediaId ? urlMap[u.avatarMediaId]?.data : null;
     return {
       id: u.userId,
       username: u.username,
       displayName: u.displayName,
-      avatarUrl: u.avatarUrl,
+      avatarMediaId: u.avatarMediaId,
+      avatarUrl: avatarUrls?.thumbnail || avatarUrls?.original || null,
       isVerified: u.isVerified,
       isPrivate: u.isPrivate,
     };
   }
 
-  private mapReel(reel: any, currentUserId?: string) {
+  private mapReel(reel: any, currentUserId?: string, urlMap: Record<string, any> = {}) {
     const isLiked = currentUserId
       ? (reel.likes ?? []).some((l: any) => l.userId === currentUserId)
       : false;
@@ -52,12 +59,18 @@ export class ReelsService {
       ? (reel.bookmarks ?? []).some((b: any) => b.userId === currentUserId)
       : false;
 
+    const videoUrls = reel.videoMediaId ? urlMap[reel.videoMediaId]?.data : null;
+    const thumbUrls = reel.thumbnailMediaId ? urlMap[reel.thumbnailMediaId]?.data : null;
     return {
       id: reel.id,
-      author: reel.author ? this.mapAuthor(reel.author) : null,
+      author: reel.author ? this.mapAuthor(reel.author, urlMap) : null,
       content: reel.content,
-      videoUrl: reel.videoUrl,
-      thumbnailUrl: reel.thumbnailUrl,
+      videoMediaId: reel.videoMediaId,
+      thumbnailMediaId: reel.thumbnailMediaId,
+      // Resolved URLs for FE (backward-compatible field names)
+      videoUrl: videoUrls?.hls || videoUrls?.original || null,
+      fallbackUrl: videoUrls?.fallback || videoUrls?.original || null,
+      thumbnailUrl: thumbUrls?.thumbnail || thumbUrls?.original || null,
       duration: reel.duration,
       hashtags: reel.hashtags,
       musicId: reel.musicId,
@@ -78,6 +91,17 @@ export class ReelsService {
     likes: { select: { userId: true } },
     bookmarks: { select: { userId: true } },
   };
+
+  /** Collect all unique mediaIds from a list of reels (video, thumbnail, author avatar) */
+  private collectMediaIds(reels: any[]): string[] {
+    const ids = new Set<string>();
+    for (const r of reels) {
+      if (r.videoMediaId) ids.add(r.videoMediaId);
+      if (r.thumbnailMediaId && r.thumbnailMediaId !== r.videoMediaId) ids.add(r.thumbnailMediaId);
+      if (r.author?.avatarMediaId) ids.add(r.author.avatarMediaId);
+    }
+    return [...ids];
+  }
 
   // ── Personal Feed (Following) ─────────────────────────────
   async getFollowingFeed(userId: string, page: number, pageSize: number) {
@@ -113,9 +137,11 @@ export class ReelsService {
       }),
     ]);
 
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectMediaIds(reels));
+
     return {
       statusCode: 200,
-      data: reels.map((r) => this.mapReel(r, userId)),
+      data: reels.map((r) => this.mapReel(r, userId, urlMap)),
       meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
@@ -145,9 +171,11 @@ export class ReelsService {
       }),
     ]);
 
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectMediaIds(reels));
+
     return {
       statusCode: 200,
-      data: reels.map((r) => this.mapReel(r, currentUserId)),
+      data: reels.map((r) => this.mapReel(r, currentUserId, urlMap)),
       meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
@@ -172,9 +200,11 @@ export class ReelsService {
       }),
     ]);
 
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectMediaIds(reels));
+
     return {
       statusCode: 200,
-      data: reels.map((r) => this.mapReel(r, currentUserId)),
+      data: reels.map((r) => this.mapReel(r, currentUserId, urlMap)),
       meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
@@ -183,41 +213,24 @@ export class ReelsService {
   async createReel(authorId: string, dto: CreateReelDto) {
     logger.info('Creating reel', { authorId });
 
-    let finalVideoUrl = dto.videoUrl;
-    let finalThumbnailUrl = dto.thumbnailUrl;
+    // The client now provides the media IDs directly from Media Service.
+    // We just store them without coupling to Media Service URLs.
+    const finalVideoMediaId = dto.videoMediaId || dto.mediaId;
 
-    if (dto.mediaId) {
-      try {
-        const mediaServiceUrl = process.env.MEDIA_SERVICE_URL || 'http://localhost:3003';
-        const response = await fetch(`${mediaServiceUrl}/media/${dto.mediaId}/preview`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch media information');
-        }
-        const mediaPreview: any = await response.json();
-        
-        if (mediaPreview.status !== 'ready') {
-          throw new ForbiddenException('Media is not ready yet');
-        }
+    // If no explicit thumbnailMediaId provided, fall back to the video's mediaId.
+    // The media-service /access endpoint will return both the original and thumbnail URLs.
+    const finalThumbnailMediaId = dto.thumbnailMediaId ?? finalVideoMediaId;
 
-        // Prefer HLS stream if available, otherwise direct download URL
-        finalVideoUrl = mediaPreview.hlsPath ? `${mediaServiceUrl}/media/${dto.mediaId}/hls/index.m3u8` : mediaPreview.downloadUrl;
-        finalThumbnailUrl = mediaPreview.thumbnailPath ? `${mediaServiceUrl}/media/${dto.mediaId}/thumbnail` : dto.thumbnailUrl;
-      } catch (err: any) {
-        logger.error(`Error verifying media ${dto.mediaId}`, err);
-        throw new ForbiddenException(err.message || 'Error verifying media');
-      }
-    }
-
-    if (!finalVideoUrl) {
-      throw new ForbiddenException('Video URL or ready Media ID is required');
+    if (!finalVideoMediaId) {
+      throw new ForbiddenException('Video Media ID is required');
     }
 
     const reel = await this.prisma.reel.create({
       data: {
         authorId,
         content: dto.content,
-        videoUrl: finalVideoUrl,
-        thumbnailUrl: finalThumbnailUrl ?? null,
+        videoMediaId: finalVideoMediaId,
+        thumbnailMediaId: finalThumbnailMediaId ?? null,
         duration: dto.duration ?? null,
         hashtags: this.extractHashtags(dto.content),
         musicId: dto.musicId ?? null,
@@ -226,7 +239,8 @@ export class ReelsService {
       include: this.reelInclude,
     });
 
-    return this.mapReel(reel, authorId);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectMediaIds([reel]));
+    return this.mapReel(reel, authorId, urlMap);
   }
 
   // ── Get Reel By ID ────────────────────────────────────────

@@ -8,11 +8,16 @@ import { createLogger } from '@platform/logger';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from '../users/dto/user.dto';
 
+import { MediaResolverService } from '../common/services/media-resolver.service';
+
 const logger = createLogger({ service: 'social-service:profile' });
 
 @Injectable()
 export class ProfileService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mediaResolver: MediaResolverService,
+  ) {}
 
   private buildPagination(page: number, pageSize: number, totalItems: number) {
     const totalPages = Math.ceil(totalItems / pageSize);
@@ -57,7 +62,7 @@ export class ProfileService {
     return false;
   }
 
-  private mapProfileTabPost(post: any, currentUserId?: string) {
+  private mapProfileTabPost(post: any, currentUserId?: string, urlMap: Record<string, any> = {}) {
     const likes = Array.isArray(post.likes) ? post.likes : [];
     const bookmarks = Array.isArray(post.bookmarks) ? post.bookmarks : [];
     const derivedLikeCount = Array.isArray(likes) ? likes.length : Number(post.likeCount ?? 0);
@@ -65,11 +70,19 @@ export class ProfileService {
       ? likes.some((like: any) => like.userId === currentUserId)
       : false;
 
+    const authorAvatarUrls = post.author?.avatarMediaId ? urlMap[post.author.avatarMediaId]?.data : null;
+    const mediaUrls = (post.mediaIds ?? []).map((id: string) => ({
+      mediaId: id,
+      url: urlMap[id]?.data?.original || null,
+      thumbnailUrl: urlMap[id]?.data?.thumbnail || null,
+    }));
+
     return {
       id: post.id,
       type: post.type?.toLowerCase?.() ?? 'text',
       content: post.content,
-      mediaUrls: post.mediaUrls ?? [],
+      mediaIds: post.mediaIds ?? [],
+      mediaUrls,
       hashtags: post.hashtags ?? [],
       visibility: post.visibility?.toLowerCase?.() ?? 'public',
       likeCount: derivedLikeCount,
@@ -84,7 +97,8 @@ export class ProfileService {
             userId: post.author.userId,
             username: post.author.username,
             displayName: post.author.displayName,
-            avatarUrl: post.author.avatarUrl,
+            avatarMediaId: post.author.avatarMediaId,
+            avatarUrl: authorAvatarUrls?.thumbnail || authorAvatarUrls?.original || null,
             bio: post.author.bio,
             isVerified: post.author.isVerified,
           }
@@ -99,13 +113,17 @@ export class ProfileService {
     };
   }
 
-  private mapProfile(u: any) {
+  private mapProfile(u: any, urlMap: Record<string, any> = {}) {
+    const avatarUrls = u.avatarMediaId ? urlMap[u.avatarMediaId]?.data : null;
+    const coverUrls = u.coverMediaId ? urlMap[u.coverMediaId]?.data : null;
     return {
       id: u.userId,
       username: u.username,
       displayName: u.displayName,
-      avatarUrl: u.avatarUrl,
-      coverUrl: u.coverUrl,
+      avatarMediaId: u.avatarMediaId,
+      coverMediaId: u.coverMediaId,
+      avatarUrl: avatarUrls?.thumbnail || avatarUrls?.original || null,
+      coverUrl: coverUrls?.original || null,
       bio: u.bio,
       website: u.website,
       location: u.location,
@@ -152,7 +170,9 @@ export class ProfileService {
     user.followingCount = followingCount;
     user.postCount = postCount;
 
-    const profile: any = this.mapProfile(user);
+    const mediaIds = [user.avatarMediaId, user.coverMediaId].filter(Boolean) as string[];
+    const urlMap = await this.mediaResolver.resolveBatch(mediaIds);
+    const profile: any = this.mapProfile(user, urlMap);
 
     if (currentUserId && currentUserId !== userId) {
       const [follow, friendship, block, mute] = await Promise.all([
@@ -229,7 +249,7 @@ export class ProfileService {
               authorId: true,
               type: true,
               content: true,
-              mediaUrls: true,
+              mediaIds: true,
               hashtags: true,
               visibility: true,
               likeCount: true,
@@ -244,7 +264,7 @@ export class ProfileService {
                   userId: true,
                   username: true,
                   displayName: true,
-                  avatarUrl: true,
+                  avatarMediaId: true,
                   bio: true,
                   isVerified: true,
                 },
@@ -272,9 +292,16 @@ export class ProfileService {
           }
         }
 
+        const postMediaIds = new Set<string>();
+        for (const p of visiblePosts) {
+          for (const id of (p.mediaIds ?? [])) postMediaIds.add(id);
+          if (p.author?.avatarMediaId) postMediaIds.add(p.author.avatarMediaId);
+        }
+        const urlMap = await this.mediaResolver.resolveBatch([...postMediaIds]);
+
         return {
           statusCode: 200,
-          data: visiblePosts.map((post) => this.mapProfileTabPost(post, currentUserId)),
+          data: visiblePosts.map((post) => this.mapProfileTabPost(post, currentUserId, urlMap)),
           meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
         };
       }
@@ -299,8 +326,8 @@ export class ProfileService {
             select: {
               id: true,
               content: true,
-              videoUrl: true,
-              thumbnailUrl: true,
+              videoMediaId: true,
+              thumbnailMediaId: true,
               duration: true,
               likeCount: true,
               commentCount: true,
@@ -330,7 +357,7 @@ export class ProfileService {
               id: true,
               title: true,
               description: true,
-              thumbnailUrl: true,
+              thumbnailMediaId: true,
               duration: true,
               likeCount: true,
               commentCount: true,
@@ -360,7 +387,7 @@ export class ProfileService {
               id: true,
               title: true,
               synopsis: true,
-              coverUrl: true,
+              coverMediaId: true,
               genres: true,
               followerCount: true,
               viewCount: true,
@@ -419,7 +446,7 @@ export class ProfileService {
             userId: true,
             username: true,
             displayName: true,
-            avatarUrl: true,
+            avatarMediaId: true,
             isVerified: true,
           },
         });
@@ -447,7 +474,7 @@ export class ProfileService {
             id: fid,
             username: p?.username ?? '',
             displayName: p?.displayName ?? p?.username ?? '',
-            avatarUrl: p?.avatarUrl ?? null,
+            avatarMediaId: p?.avatarMediaId ?? null,
             isVerified: p?.isVerified ?? false,
             followerCount: followerMap.get(fid) ?? 0,
             postCount: postMap.get(fid) ?? 0,
@@ -478,7 +505,7 @@ export class ProfileService {
                   id: true,
                   name: true,
                   description: true,
-                  coverUrl: true,
+                  coverMediaId: true,
                   privacy: true,
                   memberCount: true,
                   postCount: true,
@@ -517,8 +544,8 @@ export class ProfileService {
       data: {
         ...(dto.displayName !== undefined && { displayName: dto.displayName }),
         ...(dto.bio !== undefined && { bio: dto.bio }),
-        ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl }),
-        ...(dto.coverUrl !== undefined && { coverUrl: dto.coverUrl }),
+        ...(dto.avatarMediaId !== undefined && { avatarMediaId: dto.avatarMediaId }),
+        ...(dto.coverMediaId !== undefined && { coverMediaId: dto.coverMediaId }),
         ...(dto.website !== undefined && { website: dto.website }),
         ...(dto.location !== undefined && { location: dto.location }),
         ...(dto.hometown !== undefined && { hometown: dto.hometown }),

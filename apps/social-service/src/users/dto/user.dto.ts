@@ -26,12 +26,12 @@ export class UpdateProfileDto {
   @ApiPropertyOptional({ example: 'https://cdn.example.com/avatar.jpg' })
   @IsOptional()
   @IsString()
-  avatarUrl?: string;
+  avatarMediaId?: string;
 
   @ApiPropertyOptional({ example: 'https://cdn.example.com/cover.jpg' })
   @IsOptional()
   @IsString()
-  coverUrl?: string;
+  coverMediaId?: string;
 
   @ApiPropertyOptional({ example: 'https://mywebsite.com' })
   @IsOptional()

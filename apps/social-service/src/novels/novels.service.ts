@@ -17,11 +17,16 @@ import {
   PaginationQueryDto,
 } from './dto/novel.dto';
 
+import { MediaResolverService } from '../common/services/media-resolver.service';
+
 const logger = createLogger({ service: 'social-service:novels' });
 
 @Injectable()
 export class NovelsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mediaResolver: MediaResolverService,
+  ) {}
 
   private buildPagination(page: number, pageSize: number, totalItems: number) {
     return {
@@ -33,26 +38,31 @@ export class NovelsService {
     };
   }
 
-  private mapAuthor(u: any) {
+  private mapAuthor(u: any, urlMap: Record<string, any> = {}) {
+    const avatarUrls = u.avatarMediaId ? urlMap[u.avatarMediaId]?.data : null;
     return {
       id: u.userId,
       username: u.username,
       displayName: u.displayName,
-      avatarUrl: u.avatarUrl,
+      avatarMediaId: u.avatarMediaId,
+      avatarUrl: avatarUrls?.thumbnail || avatarUrls?.original || null,
       isVerified: u.isVerified,
     };
   }
 
-  private mapNovel(novel: any, currentUserId?: string) {
+  private mapNovel(novel: any, currentUserId?: string, urlMap: Record<string, any> = {}) {
     const isFollowed = currentUserId
       ? (novel.follows ?? []).some((f: any) => f.userId === currentUserId)
       : false;
+
+    const coverUrls = novel.coverMediaId ? urlMap[novel.coverMediaId]?.data : null;
 
     return {
       id: novel.id,
       title: novel.title,
       synopsis: novel.synopsis,
-      coverUrl: novel.coverUrl,
+      coverMediaId: novel.coverMediaId,
+      coverUrl: coverUrls?.original || null,
       genres: novel.genres,
       tags: novel.tags,
       status: novel.status.toLowerCase(),
@@ -63,9 +73,18 @@ export class NovelsService {
       followerCount: novel.followerCount,
       chapterCount: novel.chapterCount,
       createdAt: novel.createdAt,
-      author: novel.author ? this.mapAuthor(novel.author) : null,
+      author: novel.author ? this.mapAuthor(novel.author, urlMap) : null,
       isFollowedByCurrentUser: isFollowed,
     };
+  }
+
+  private collectNovelMediaIds(novels: any[]): string[] {
+    const ids = new Set<string>();
+    for (const n of novels) {
+      if (n.coverMediaId) ids.add(n.coverMediaId);
+      if (n.author?.avatarMediaId) ids.add(n.author.avatarMediaId);
+    }
+    return [...ids];
   }
 
   private readonly novelInclude = {
@@ -94,9 +113,11 @@ export class NovelsService {
       }),
     ]);
 
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectNovelMediaIds(novels));
+
     return {
       statusCode: 200,
-      data: novels.map(n => this.mapNovel(n, currentUserId)),
+      data: novels.map(n => this.mapNovel(n, currentUserId, urlMap)),
       meta: { pagination: this.buildPagination(page, pageSize, total), timestamp: new Date().toISOString() },
     };
   }
@@ -107,7 +128,7 @@ export class NovelsService {
         authorId,
         title: dto.title,
         synopsis: dto.synopsis,
-        coverUrl: dto.coverUrl,
+        coverMediaId: dto.coverMediaId,
         genres: dto.genres ?? [],
         tags: dto.tags ?? [],
         status: (dto.status ?? 'ONGOING').toUpperCase() as any,
@@ -115,7 +136,8 @@ export class NovelsService {
       },
       include: this.novelInclude,
     });
-    return this.mapNovel(novel, authorId);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectNovelMediaIds([novel]));
+    return this.mapNovel(novel, authorId, urlMap);
   }
 
   async getNovelById(novelId: string, currentUserId?: string) {
@@ -135,7 +157,8 @@ export class NovelsService {
       data: { viewCount: { increment: 1 } },
     }).catch(err => logger.error(`View increment fail: ${novelId}`, err));
 
-    return this.mapNovel(novel, currentUserId);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectNovelMediaIds([novel]));
+    return this.mapNovel(novel, currentUserId, urlMap);
   }
 
   async updateNovel(novelId: string, authorId: string, dto: UpdateNovelDto) {
@@ -148,7 +171,7 @@ export class NovelsService {
       data: {
         ...(dto.title && { title: dto.title }),
         ...(dto.synopsis !== undefined && { synopsis: dto.synopsis }),
-        ...(dto.coverUrl !== undefined && { coverUrl: dto.coverUrl }),
+        ...(dto.coverMediaId !== undefined && { coverMediaId: dto.coverMediaId }),
         ...(dto.genres && { genres: dto.genres }),
         ...(dto.tags && { tags: dto.tags }),
         ...(dto.status && { status: dto.status.toUpperCase() as any }),
@@ -157,7 +180,8 @@ export class NovelsService {
       include: this.novelInclude,
     });
 
-    return this.mapNovel(updated, authorId);
+    const urlMap = await this.mediaResolver.resolveBatch(this.collectNovelMediaIds([updated]));
+    return this.mapNovel(updated, authorId, urlMap);
   }
 
   async deleteNovel(novelId: string, authorId: string) {
@@ -409,7 +433,7 @@ export class NovelsService {
     const novelIds = progresses.map(p => p.novelId);
     const novels = await this.prisma.novel.findMany({
       where: { id: { in: novelIds } },
-      select: { id: true, title: true, coverUrl: true, author: { select: { displayName: true } } },
+      select: { id: true, title: true, coverMediaId: true, author: { select: { displayName: true } } },
     });
     const novelMap = new Map(novels.map(n => [n.id, n]));
 

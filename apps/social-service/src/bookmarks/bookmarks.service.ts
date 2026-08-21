@@ -44,7 +44,7 @@ export class BookmarksService {
               id: b.post.id,
               content: b.post.content,
               type: b.post.type.toLowerCase(),
-              author: { id: b.post.author.userId, username: b.post.author.username, displayName: b.post.author.displayName, avatarUrl: b.post.author.avatarUrl },
+              author: { id: b.post.author.userId, username: b.post.author.username, displayName: b.post.author.displayName, avatarMediaId: b.post.author.avatarMediaId },
               createdAt: b.post.createdAt,
             }
           : null,

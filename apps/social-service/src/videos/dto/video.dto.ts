@@ -10,6 +10,7 @@ import {
   Max,
   IsBoolean,
   IsArray,
+  IsNotEmpty,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -36,12 +37,13 @@ export class CreateVideoDto {
 
   @ApiProperty()
   @IsString()
-  videoUrl!: string;
+  @IsNotEmpty()
+  videoMediaId!: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty({ required: false })
   @IsString()
-  thumbnailUrl?: string;
+  @IsOptional()
+  thumbnailMediaId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -71,7 +73,7 @@ export class UpdateVideoDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  thumbnailUrl?: string;
+  thumbnailMediaId?: string;
 
   @ApiPropertyOptional({ enum: VideoVisibility })
   @IsOptional()
